@@ -1,0 +1,10 @@
+image:
+  repository: uptime-kuma-operator
+  tag: latest
+
+kuma:
+  url: ""
+  existingSecret: "" # must contain keys "username" and "password"
+
+watchAll: false
+watchNamespaces: [] # e.g. ["prod", "staging"]; ignored (cluster-wide RBAC used) if watchAll is true
