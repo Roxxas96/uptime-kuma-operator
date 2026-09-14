@@ -172,8 +172,15 @@ func main() {
 
 - [ ] **Step 7: Verify it builds**
 
-Run: `go build ./...`
+Run: `go build -o /dev/null ./...`
 Expected: exits 0, no output.
+
+(Not `go build ./...` without `-o`: at this point in the plan `cmd` is the
+repo's only package, and Go's default single-main-package behavior tries to
+write a binary literally named `cmd` into the repo root, colliding with the
+`cmd/` directory itself — `go: build output "cmd" already exists and is a
+directory`. `-o /dev/null` sidesteps this and remains correct once later
+tasks add more packages.)
 
 - [ ] **Step 8: Commit**
 
