@@ -10,6 +10,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -47,7 +48,16 @@ func main() {
 
 	restCfg := ctrl.GetConfigOrDie()
 
-	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{Scheme: scheme})
+	mgrOpts := ctrl.Options{Scheme: scheme}
+	if !cfg.WatchAll {
+		nsCache := map[string]cache.Config{}
+		for _, ns := range cfg.WatchNamespaces {
+			nsCache[ns] = cache.Config{}
+		}
+		mgrOpts.Cache = cache.Options{DefaultNamespaces: nsCache}
+	}
+
+	mgr, err := ctrl.NewManager(restCfg, mgrOpts)
 	if err != nil {
 		log.Error(err, "unable to start manager")
 		os.Exit(1)

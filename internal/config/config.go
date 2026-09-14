@@ -39,5 +39,13 @@ func Load(getenv func(string) string) (Config, error) {
 		}
 	}
 
+	if !cfg.WatchAll && len(cfg.WatchNamespaces) == 0 {
+		if podNamespace := getenv("POD_NAMESPACE"); podNamespace != "" {
+			cfg.WatchNamespaces = []string{podNamespace}
+		} else {
+			return Config{}, fmt.Errorf("config: WATCH_NAMESPACES or POD_NAMESPACE must be set when WATCH_ALL is not \"true\"")
+		}
+	}
+
 	return cfg, nil
 }
