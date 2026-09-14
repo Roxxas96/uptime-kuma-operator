@@ -1,0 +1,12 @@
+apiVersion: uptime-kuma.io/v1alpha1
+kind: Monitor
+metadata:
+  name: game-server-sample
+spec:
+  type: Gamedig
+  name: "Sample Game Server"
+  interval: 60
+  gamedig:
+    host: game.example.com
+    port: 27015
+    game: csgo
