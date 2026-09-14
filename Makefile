@@ -19,7 +19,7 @@ test: manifests generate gateway-api-crds
 
 .PHONY: build
 build:
-	go build -o bin/manager ./cmd/manager
+	go build -o bin/manager ./cmd
 
 .PHONY: gateway-api-crds
 gateway-api-crds:
@@ -28,7 +28,7 @@ gateway-api-crds:
 		-o config/crd/gateway-api/httproutes.yaml
 
 controller-gen:
-	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0
 
 envtest:
-	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.25.1
