@@ -7,7 +7,7 @@ import (
 )
 
 // DefaultDriftCheckInterval is used when DRIFT_CHECK_INTERVAL is unset.
-const DefaultDriftCheckInterval = 5 * time.Minute
+const DefaultDriftCheckInterval = 30 * time.Second
 
 type Config struct {
 	KumaURL         string
