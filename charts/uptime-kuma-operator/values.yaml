@@ -18,4 +18,4 @@ optInByDefault: false
 # How often a reconciler that found nothing to sync re-checks that Kuma
 # still has the monitor(s) it's supposed to, recreating any deleted
 # out-of-band (e.g. manually in the Kuma UI). Go duration string.
-driftCheckInterval: 5m
+driftCheckInterval: 30s
