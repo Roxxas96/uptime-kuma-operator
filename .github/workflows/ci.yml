@@ -17,14 +17,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2 # installs go, golangci-lint, govulncheck, helm, pre-commit pinned in mise.toml
+      - uses: jdx/mise-action@v4 # installs go, golangci-lint, govulncheck, helm, pre-commit pinned in mise.toml
       - uses: pre-commit/action@v3.0.1
 
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v4
       - run: make test
 
   build:
