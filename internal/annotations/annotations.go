@@ -15,9 +15,23 @@ const (
 	RetryInterval       = "uptime-kuma.io/retry-interval"
 	MaxRetries          = "uptime-kuma.io/max-retries"
 	AcceptedStatusCodes = "uptime-kuma.io/accepted-statuscodes"
-	MonitorIDs          = "uptime-kuma.io/monitor-ids"
-	SyncedHash          = "uptime-kuma.io/synced-hash"
-	Finalizer           = "uptime-kuma.io/finalizer"
+
+	Description              = "uptime-kuma.io/description"
+	ResendInterval           = "uptime-kuma.io/resend-interval"
+	UpsideDown               = "uptime-kuma.io/upside-down"
+	Timeout                  = "uptime-kuma.io/timeout"
+	MaxRedirects             = "uptime-kuma.io/max-redirects"
+	IgnoreTLS                = "uptime-kuma.io/ignore-tls"
+	CacheBust                = "uptime-kuma.io/cache-bust"
+	ExpiryNotification       = "uptime-kuma.io/expiry-notification"
+	DomainExpiryNotification = "uptime-kuma.io/domain-expiry-notification"
+	Headers                  = "uptime-kuma.io/headers"
+	Body                     = "uptime-kuma.io/body"
+	Path                     = "uptime-kuma.io/path"
+
+	MonitorIDs = "uptime-kuma.io/monitor-ids"
+	SyncedHash = "uptime-kuma.io/synced-hash"
+	Finalizer  = "uptime-kuma.io/finalizer"
 )
 
 // ShouldSync reports whether a resource carrying ann should be synced to
@@ -43,6 +57,19 @@ type Overrides struct {
 	RetryInterval       int64
 	MaxRetries          int64
 	AcceptedStatusCodes []string
+
+	Description              string
+	ResendInterval           int64
+	UpsideDown               bool
+	Timeout                  int64
+	MaxRedirects             int64
+	IgnoreTLS                bool
+	CacheBust                bool
+	ExpiryNotification       bool
+	DomainExpiryNotification bool
+	Headers                  string
+	Body                     string
+	Path                     string // "" | "/..." — must start with "/" if set
 }
 
 func ParseOverrides(ann map[string]string) (Overrides, error) {
@@ -69,6 +96,39 @@ func ParseOverrides(ann map[string]string) (Overrides, error) {
 			o.AcceptedStatusCodes = append(o.AcceptedStatusCodes, strings.TrimSpace(code))
 		}
 	}
+
+	o.Description = ann[Description]
+	o.Headers = ann[Headers]
+	o.Body = ann[Body]
+	o.Path = ann[Path]
+	if o.Path != "" && !strings.HasPrefix(o.Path, "/") {
+		return Overrides{}, fmt.Errorf("annotations: %s must start with \"/\", got %q", Path, o.Path)
+	}
+
+	if o.ResendInterval, err = parseIntAnnotation(ann, ResendInterval); err != nil {
+		return Overrides{}, err
+	}
+	if o.Timeout, err = parseIntAnnotation(ann, Timeout); err != nil {
+		return Overrides{}, err
+	}
+	if o.MaxRedirects, err = parseIntAnnotation(ann, MaxRedirects); err != nil {
+		return Overrides{}, err
+	}
+	if o.UpsideDown, err = parseBoolAnnotation(ann, UpsideDown); err != nil {
+		return Overrides{}, err
+	}
+	if o.IgnoreTLS, err = parseBoolAnnotation(ann, IgnoreTLS); err != nil {
+		return Overrides{}, err
+	}
+	if o.CacheBust, err = parseBoolAnnotation(ann, CacheBust); err != nil {
+		return Overrides{}, err
+	}
+	if o.ExpiryNotification, err = parseBoolAnnotation(ann, ExpiryNotification); err != nil {
+		return Overrides{}, err
+	}
+	if o.DomainExpiryNotification, err = parseBoolAnnotation(ann, DomainExpiryNotification); err != nil {
+		return Overrides{}, err
+	}
 	return o, nil
 }
 
@@ -82,6 +142,22 @@ func parseIntAnnotation(ann map[string]string, key string) (int64, error) {
 		return 0, fmt.Errorf("annotations: %s must be an integer, got %q", key, v)
 	}
 	return n, nil
+}
+
+// parseBoolAnnotation returns ann[key] parsed as a bool, or false if the
+// annotation is absent or empty. false already matches every boolean
+// field's Kuma-side default used in this codebase, so "unset" and
+// "explicitly false" don't need to be distinguished.
+func parseBoolAnnotation(ann map[string]string, key string) (bool, error) {
+	v, ok := ann[key]
+	if !ok || v == "" {
+		return false, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("annotations: %s must be a boolean, got %q", key, v)
+	}
+	return b, nil
 }
 
 // ParseMonitorIDs decodes the operator-written MonitorIDs annotation (a

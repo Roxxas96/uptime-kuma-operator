@@ -1,6 +1,9 @@
 package annotations
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestShouldSync(t *testing.T) {
 	cases := []struct {
@@ -111,5 +114,56 @@ func TestParseMonitorIDs_MissingAnnotationIsEmptyMap(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("ParseMonitorIDs(nil) = %v, want empty map", got)
+	}
+}
+
+func TestParseOverrides_Phase1Fields(t *testing.T) {
+	ov, err := ParseOverrides(map[string]string{
+		Description:              "a friendly description",
+		ResendInterval:           "3",
+		UpsideDown:               "true",
+		Timeout:                  "10",
+		MaxRedirects:             "5",
+		IgnoreTLS:                "true",
+		CacheBust:                "true",
+		ExpiryNotification:       "true",
+		DomainExpiryNotification: "true",
+		Headers:                  `{"X-Custom":"value"}`,
+		Body:                     `{"key":"value"}`,
+		Path:                     "/healthz",
+	})
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	want := Overrides{
+		Description: "a friendly description", ResendInterval: 3, UpsideDown: true,
+		Timeout: 10, MaxRedirects: 5, IgnoreTLS: true, CacheBust: true,
+		ExpiryNotification: true, DomainExpiryNotification: true,
+		Headers: `{"X-Custom":"value"}`, Body: `{"key":"value"}`, Path: "/healthz",
+	}
+	if !reflect.DeepEqual(ov, want) {
+		t.Errorf("ParseOverrides = %+v, want %+v", ov, want)
+	}
+}
+
+func TestParseOverrides_InvalidBoolean(t *testing.T) {
+	if _, err := ParseOverrides(map[string]string{UpsideDown: "not-a-bool"}); err == nil {
+		t.Fatal("expected error for non-boolean upside-down, got nil")
+	}
+}
+
+func TestParseOverrides_InvalidPath(t *testing.T) {
+	if _, err := ParseOverrides(map[string]string{Path: "no-leading-slash"}); err == nil {
+		t.Fatal("expected error for path without leading slash, got nil")
+	}
+}
+
+func TestParseOverrides_PathUnsetDefaultsEmpty(t *testing.T) {
+	ov, err := ParseOverrides(nil)
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	if ov.Path != "" {
+		t.Errorf("Path = %q, want empty string when unset", ov.Path)
 	}
 }
