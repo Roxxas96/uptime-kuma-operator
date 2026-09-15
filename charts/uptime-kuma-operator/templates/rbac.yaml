@@ -4,6 +4,7 @@
   (dict "apiGroups" (list "uptime-kuma.io") "resources" (list "monitors") "verbs" (list "get" "list" "watch" "update" "patch"))
   (dict "apiGroups" (list "uptime-kuma.io") "resources" (list "monitors/status") "verbs" (list "get" "update" "patch"))
   (dict "apiGroups" (list "uptime-kuma.io") "resources" (list "monitors/finalizers") "verbs" (list "update"))
+  (dict "apiGroups" (list "") "resources" (list "events") "verbs" (list "create" "patch"))
 -}}
 {{- if .Values.watchAll }}
 apiVersion: rbac.authorization.k8s.io/v1
@@ -26,7 +27,13 @@ subjects:
     name: {{ .Release.Name }}
     namespace: {{ .Release.Namespace }}
 {{- else }}
-{{- range .Values.watchNamespaces }}
+{{- /*
+  config.Load falls back to POD_NAMESPACE (the release namespace, injected by
+  deployment.yaml) when WATCH_NAMESPACES is empty, so the RBAC scope has to
+  fall back the same way — otherwise the chart's own defaults render no Role
+  at all and the manager 403s on every list/watch.
+*/}}
+{{- range (default (list .Release.Namespace) .Values.watchNamespaces) }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

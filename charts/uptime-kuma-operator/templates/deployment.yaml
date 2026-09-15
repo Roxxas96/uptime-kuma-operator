@@ -19,16 +19,16 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           env:
             - name: KUMA_URL
-              value: {{ .Values.kuma.url | quote }}
+              value: {{ required "kuma.url is required" .Values.kuma.url | quote }}
             - name: KUMA_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.kuma.existingSecret }}
+                  name: {{ required "kuma.existingSecret is required" .Values.kuma.existingSecret }}
                   key: username
             - name: KUMA_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.kuma.existingSecret }}
+                  name: {{ required "kuma.existingSecret is required" .Values.kuma.existingSecret }}
                   key: password
             - name: WATCH_ALL
               value: {{ .Values.watchAll | quote }}

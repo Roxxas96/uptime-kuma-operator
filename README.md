@@ -15,7 +15,9 @@ the full design.
      --from-literal=username=admin --from-literal=password=<password>
    ```
 
-2. Install the chart:
+2. Install the chart. The `Monitor` CRD ships in the chart's `crds/`
+   directory, so Helm installs it automatically — no separate
+   `kubectl apply` step:
 
    ```bash
    helm install uptime-kuma-operator charts/uptime-kuma-operator \
@@ -24,10 +26,24 @@ the full design.
      --set watchNamespaces={default}
    ```
 
+   `watchNamespaces` lists the namespaces to watch; it defaults to the
+   release namespace. Set `--set watchAll=true` instead to watch the whole
+   cluster (which switches the chart from per-namespace `Role`s to a
+   `ClusterRole`, and flips the opt-in default: every `Ingress`/`HTTPRoute`
+   is synced unless annotated `uptime-kuma.io/enabled=false`).
+
 3. Opt an Ingress in:
 
    ```bash
    kubectl annotate ingress my-app uptime-kuma.io/enabled=true
+   ```
+
+4. Or declare a monitor Kuma can't derive from routing (DNS, Gamedig, TCP,
+   Ping) with a `Monitor` CR — see
+   `config/samples/uptime-kuma_v1alpha1_monitor.yaml`:
+
+   ```bash
+   kubectl apply -f config/samples/uptime-kuma_v1alpha1_monitor.yaml
    ```
 
 ## Development
@@ -38,7 +54,10 @@ the full design.
   and completing Kuma's one-time setup wizard first. Not part of `make test`.
 - `./charts/uptime-kuma-operator/templates/tests/rbac_test.sh` checks the
   chart renders per-namespace `Role`s or a `ClusterRole` correctly depending
-  on `watchAll`.
+  on `watchAll`, including at chart defaults.
+- `make manifests` regenerates `config/crd/bases/` and then runs
+  `make sync-chart-crds`, which copies the CRD into the chart's `crds/`
+  directory. The two must stay byte-identical; never edit either by hand.
 
 ## Annotations
 

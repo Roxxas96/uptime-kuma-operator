@@ -8,6 +8,15 @@ generate: controller-gen
 .PHONY: manifests
 manifests: controller-gen
 	$(LOCALBIN)/controller-gen crd paths="./api/..." output:crd:artifacts:config=config/crd/bases
+	$(MAKE) sync-chart-crds
+
+# The Helm chart ships the CRD in crds/, which Helm installs before templates
+# and never templates. It must be a byte-for-byte copy of the generated CRD,
+# so `manifests` always refreshes it rather than leaving it to drift.
+.PHONY: sync-chart-crds
+sync-chart-crds:
+	mkdir -p charts/uptime-kuma-operator/crds
+	cp config/crd/bases/uptime-kuma.io_monitors.yaml charts/uptime-kuma-operator/crds/uptime-kuma.io_monitors.yaml
 
 .PHONY: envtest-bin
 envtest-bin: envtest
@@ -24,7 +33,7 @@ build:
 .PHONY: gateway-api-crds
 gateway-api-crds:
 	mkdir -p config/crd/gateway-api
-	curl -sL https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.1.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml \
+	curl -sL https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.2/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml \
 		-o config/crd/gateway-api/httproutes.yaml
 
 controller-gen:

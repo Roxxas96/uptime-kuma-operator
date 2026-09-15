@@ -1,2 +1,4 @@
 /bin/
 *.test
+# Downloaded by `make gateway-api-crds` for envtest; version is pinned in the Makefile.
+/config/crd/gateway-api/
