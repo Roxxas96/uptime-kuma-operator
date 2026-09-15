@@ -90,6 +90,41 @@ func TestLoad_ParsesNamespaceListAndWatchAll(t *testing.T) {
 	}
 }
 
+func TestLoad_OptInByDefaultIsIndependentOfWatchAll(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":      "https://kuma.example.com",
+		"KUMA_USERNAME": "admin",
+		"KUMA_PASSWORD": "secret",
+		"WATCH_ALL":     "true",
+		// OPT_IN_BY_DEFAULT deliberately left unset.
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.WatchAll {
+		t.Error("WatchAll = false, want true")
+	}
+	if cfg.OptInByDefault {
+		t.Error("OptInByDefault = true, want false — WATCH_ALL must not imply it")
+	}
+}
+
+func TestLoad_OptInByDefaultTrue(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":          "https://kuma.example.com",
+		"KUMA_USERNAME":     "admin",
+		"KUMA_PASSWORD":     "secret",
+		"POD_NAMESPACE":     "default",
+		"OPT_IN_BY_DEFAULT": "true",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.OptInByDefault {
+		t.Error("OptInByDefault = false, want true")
+	}
+}
+
 func TestLoad_MissingKumaURL(t *testing.T) {
 	_, err := Load(envMap(map[string]string{"KUMA_USERNAME": "a", "KUMA_PASSWORD": "b"}))
 	if err == nil {

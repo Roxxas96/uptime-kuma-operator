@@ -20,10 +20,14 @@ const (
 )
 
 // ShouldSync reports whether a resource carrying ann should be synced to
-// Kuma, given the operator-wide watchAll setting.
-func ShouldSync(watchAll bool, ann map[string]string) bool {
+// Kuma, given the operator-wide optInByDefault setting. This is independent
+// of which namespaces the operator watches (config.Config.WatchAll) — a
+// resource still needs an explicit uptime-kuma.io/enabled=true annotation
+// even when the operator is watching every namespace, unless optInByDefault
+// is also set.
+func ShouldSync(optInByDefault bool, ann map[string]string) bool {
 	v, ok := ann[Enabled]
-	if watchAll {
+	if optInByDefault {
 		return !ok || v != "false"
 	}
 	return ok && v == "true"

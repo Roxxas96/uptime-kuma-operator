@@ -15,13 +15,13 @@ import (
 	"uptime-kuma-operator/internal/kuma"
 )
 
-func newHTTPRouteReconciler(watchAll bool) (*HTTPRouteReconciler, *kuma.FakeClient) {
+func newHTTPRouteReconciler(optInByDefault bool) (*HTTPRouteReconciler, *kuma.FakeClient) {
 	fake := kuma.NewFakeClient()
 	return &HTTPRouteReconciler{
-		Client:   k8sClient,
-		Kuma:     fake,
-		WatchAll: watchAll,
-		Recorder: record.NewFakeRecorder(16),
+		Client:         k8sClient,
+		Kuma:           fake,
+		OptInByDefault: optInByDefault,
+		Recorder:       record.NewFakeRecorder(16),
 	}, fake
 }
 
@@ -105,7 +105,7 @@ func TestHTTPRouteReconciler_OptOutDeletesExistingMonitor(t *testing.T) {
 		t.Fatalf("first Reconcile: %v", err)
 	}
 	if len(fake.Monitors) != 1 {
-		t.Fatalf("expected 1 monitor after watch-all sync, got %d", len(fake.Monitors))
+		t.Fatalf("expected 1 monitor after opt-in-by-default sync, got %d", len(fake.Monitors))
 	}
 
 	if err := k8sClient.Get(ctx, req.NamespacedName, route); err != nil {

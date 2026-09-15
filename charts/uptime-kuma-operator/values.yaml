@@ -8,3 +8,9 @@ kuma:
 
 watchAll: false
 watchNamespaces: [] # e.g. ["prod", "staging"]; ignored (cluster-wide RBAC used) if watchAll is true
+
+# Independent of watchAll: whether Ingress/HTTPRoute resources need an
+# explicit uptime-kuma.io/enabled=true annotation to be synced. false (the
+# default) requires it everywhere, including when watchAll is true — set
+# this to true to sync everything unless annotated enabled=false instead.
+optInByDefault: false

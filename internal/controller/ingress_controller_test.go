@@ -15,13 +15,13 @@ import (
 	"uptime-kuma-operator/internal/kuma"
 )
 
-func newIngressReconciler(watchAll bool) (*IngressReconciler, *kuma.FakeClient) {
+func newIngressReconciler(optInByDefault bool) (*IngressReconciler, *kuma.FakeClient) {
 	fake := kuma.NewFakeClient()
 	return &IngressReconciler{
-		Client:   k8sClient,
-		Kuma:     fake,
-		WatchAll: watchAll,
-		Recorder: record.NewFakeRecorder(16),
+		Client:         k8sClient,
+		Kuma:           fake,
+		OptInByDefault: optInByDefault,
+		Recorder:       record.NewFakeRecorder(16),
 	}, fake
 }
 
@@ -94,7 +94,7 @@ func TestIngressReconciler_DefaultMode_SyncsWhenEnabled(t *testing.T) {
 
 func TestIngressReconciler_OptOutDeletesExistingMonitor(t *testing.T) {
 	ctx := context.Background()
-	r, fake := newIngressReconciler(true) // watch-all mode
+	r, fake := newIngressReconciler(true) // opt-in by default
 
 	ing := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
@@ -113,10 +113,10 @@ func TestIngressReconciler_OptOutDeletesExistingMonitor(t *testing.T) {
 	}()
 
 	if _, err := r.Reconcile(ctx, req); err != nil {
-		t.Fatalf("first Reconcile (sync via watch-all): %v", err)
+		t.Fatalf("first Reconcile (sync via opt-in-by-default): %v", err)
 	}
 	if len(fake.Monitors) != 1 {
-		t.Fatalf("expected 1 monitor after watch-all sync, got %d", len(fake.Monitors))
+		t.Fatalf("expected 1 monitor after opt-in-by-default sync, got %d", len(fake.Monitors))
 	}
 
 	if err := k8sClient.Get(ctx, req.NamespacedName, ing); err != nil {
