@@ -29,7 +29,16 @@ type Config struct {
 	// recreating any that were deleted out-of-band (e.g. manually in the
 	// Kuma UI). Defaults to DefaultDriftCheckInterval.
 	DriftCheckInterval time.Duration
+	// LogLevel controls log verbosity: "debug", "info" (default), "warn",
+	// or "error". "debug" additionally surfaces per-reconcile detail (what
+	// triggered a reconcile, which decision branch was taken) beyond the
+	// default create/update/delete action logs.
+	LogLevel string
 }
+
+// validLogLevels are the accepted values for LOG_LEVEL, matching what
+// cmd/main.go's zap logger can be configured with.
+var validLogLevels = map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 
 // Load builds a Config from environment variables, read via getenv so tests
 // don't need to mutate real process environment.
@@ -41,6 +50,15 @@ func Load(getenv func(string) string) (Config, error) {
 		WatchAll:           getenv("WATCH_ALL") == "true",
 		OptInByDefault:     getenv("OPT_IN_BY_DEFAULT") == "true",
 		DriftCheckInterval: DefaultDriftCheckInterval,
+		LogLevel:           "info",
+	}
+
+	if raw := getenv("LOG_LEVEL"); raw != "" {
+		lvl := strings.ToLower(raw)
+		if !validLogLevels[lvl] {
+			return Config{}, fmt.Errorf("config: LOG_LEVEL must be one of debug, info, warn, error, got %q", raw)
+		}
+		cfg.LogLevel = lvl
 	}
 
 	if raw := getenv("DRIFT_CHECK_INTERVAL"); raw != "" {

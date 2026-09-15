@@ -34,12 +34,15 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	mon := &uptimekumaiov1alpha1.Monitor{}
 	if err := r.Client.Get(ctx, req.NamespacedName, mon); err != nil {
 		if apierrors.IsNotFound(err) {
+			log.V(1).Info("Monitor not found, assuming it was deleted")
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
 	}
+	log.V(1).Info("reconcile triggered", "resourceVersion", mon.ResourceVersion, "generation", mon.Generation)
 
 	if !mon.DeletionTimestamp.IsZero() {
+		log.V(1).Info("Monitor marked for deletion, deleting its Kuma monitor")
 		if mon.Status.MonitorID != "" {
 			id, err := strconv.ParseInt(mon.Status.MonitorID, 10, 64)
 			if err != nil {
@@ -80,6 +83,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	desiredSpec := toKumaSpec(mon.Spec)
 	if existingID != 0 && mon.Status.ObservedGeneration == mon.Generation {
+		log.V(1).Info("desired configuration unchanged since last sync, checking Kuma for drift", "monitorID", existingID)
 		liveSpecs, err := r.Kuma.ExistingSpecs(ctx)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -89,6 +93,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				// Nothing changed and Kuma still has it configured the way
 				// we want — nothing to do, but check again later in case it's
 				// deleted or edited out-of-band.
+				log.V(1).Info("Kuma monitor matches desired state, nothing to do", "monitorID", existingID)
 				return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 			}
 			log.Info("Kuma monitor configuration drifted from desired state, correcting", "monitorID", mon.Status.MonitorID)
@@ -100,6 +105,11 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	generationToSync := mon.Generation
 	creating := existingID == 0
+	if creating {
+		log.V(1).Info("no existing Kuma monitor, creating", "name", desiredSpec.Name, "type", desiredSpec.Type)
+	} else {
+		log.V(1).Info("spec changed or drift correction needed, syncing", "monitorID", existingID)
+	}
 
 	newID, err := r.Kuma.Upsert(ctx, existingID, desiredSpec)
 	if err != nil {

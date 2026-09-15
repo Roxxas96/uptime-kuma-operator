@@ -9,6 +9,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"uptime-kuma-operator/internal/annotations"
@@ -30,15 +31,20 @@ type HTTPRouteReconciler struct {
 }
 
 func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
 	route := &gatewayv1.HTTPRoute{}
 	if err := r.Client.Get(ctx, req.NamespacedName, route); err != nil {
 		if apierrors.IsNotFound(err) {
+			log.V(1).Info("HTTPRoute not found, assuming it was deleted")
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
 	}
+	log.V(1).Info("reconcile triggered", "resourceVersion", route.ResourceVersion, "generation", route.Generation)
 
 	if !route.DeletionTimestamp.IsZero() {
+		log.V(1).Info("HTTPRoute marked for deletion, deleting its Kuma monitors")
 		if err := deleteAllMonitors(ctx, r.Kuma, route.Annotations); err != nil {
 			recordSyncFailure(r.Recorder, route, err)
 			return ctrl.Result{}, err
@@ -58,8 +64,10 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, err
 		}
 		if len(existingIDs) == 0 && !controllerutil.ContainsFinalizer(route, annotations.Finalizer) {
+			log.V(1).Info("HTTPRoute not opted in and has no tracked monitors, nothing to do", "optInByDefault", r.OptInByDefault)
 			return ctrl.Result{}, nil
 		}
+		log.V(1).Info("HTTPRoute opted out, deleting its Kuma monitors", "optInByDefault", r.OptInByDefault)
 		if err := deleteAllMonitors(ctx, r.Kuma, route.Annotations); err != nil {
 			recordSyncFailure(r.Recorder, route, err)
 			return ctrl.Result{}, err
@@ -92,13 +100,16 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// that it's still configured the way we want, since a monitor
 		// deleted or edited out-of-band (e.g. manually in the Kuma UI) would
 		// otherwise never be noticed or corrected.
+		log.V(1).Info("desired configuration unchanged since last sync, checking Kuma for drift", "hash", hash)
 		liveSpecs, err := r.Kuma.ExistingSpecs(ctx)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if specsMatch(desired, existingIDs, liveSpecs) {
+			log.V(1).Info("Kuma monitors match desired state, nothing to do", "hosts", len(desired))
 			return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 		}
+		log.V(1).Info("Kuma monitors drifted from desired state, correcting")
 		newIDs, err := reconcileDrift(ctx, r.Kuma, desired, existingIDs, liveSpecs)
 		if err != nil {
 			recordSyncFailure(r.Recorder, route, err)
@@ -107,6 +118,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, persistMonitorIDs(ctx, r.Client, route, newIDs, true, hash)
 	}
 
+	log.V(1).Info("desired configuration changed, syncing", "oldHash", annotations.ParseSyncedHash(route.Annotations), "newHash", hash, "hosts", len(desired))
 	newIDs, err := syncMonitors(ctx, r.Kuma, desired, existingIDs)
 	if err != nil {
 		recordSyncFailure(r.Recorder, route, err)

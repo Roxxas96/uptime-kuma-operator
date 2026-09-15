@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"go.uber.org/zap/zapcore"
 	networkingv1 "k8s.io/api/networking/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
@@ -22,6 +23,17 @@ import (
 
 var scheme = clientgoscheme.Scheme
 
+// zapLevels maps config.Config.LogLevel's accepted values to zap levels.
+// "debug" is what makes the operator's V(1) reconcile-detail logs (what
+// triggered a reconcile, which decision branch was taken) visible, on top
+// of the always-on Info-level create/update/delete action logs.
+var zapLevels = map[string]zapcore.Level{
+	"debug": zapcore.DebugLevel,
+	"info":  zapcore.InfoLevel,
+	"warn":  zapcore.WarnLevel,
+	"error": zapcore.ErrorLevel,
+}
+
 func init() {
 	utilruntime.Must(networkingv1.AddToScheme(scheme))
 	utilruntime.Must(uptimekumaiov1alpha1.AddToScheme(scheme))
@@ -30,6 +42,8 @@ func init() {
 }
 
 func main() {
+	// Default to Info level until config.Load resolves LogLevel below — this
+	// only affects the brief window before that, e.g. a config error.
 	ctrl.SetLogger(zap.New())
 	log := ctrl.Log.WithName("setup")
 
@@ -38,6 +52,9 @@ func main() {
 		log.Error(err, "invalid configuration")
 		os.Exit(1)
 	}
+
+	ctrl.SetLogger(zap.New(zap.Level(zapLevels[cfg.LogLevel])))
+	log = ctrl.Log.WithName("setup")
 
 	ctx := context.Background()
 	kumaClient, err := kuma.NewClient(ctx, cfg.KumaURL, cfg.KumaUsername, cfg.KumaPassword)
@@ -94,7 +111,7 @@ func main() {
 	}
 
 	log.Info("starting manager", "watchNamespaces", cfg.WatchNamespaces, "watchAll", cfg.WatchAll,
-		"optInByDefault", cfg.OptInByDefault, "driftCheckInterval", cfg.DriftCheckInterval)
+		"optInByDefault", cfg.OptInByDefault, "driftCheckInterval", cfg.DriftCheckInterval, "logLevel", cfg.LogLevel)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Error(err, "manager exited with error")
 		os.Exit(1)

@@ -47,9 +47,14 @@ the full design.
    If a monitor is deleted or reconfigured directly in Kuma (e.g. via its
    UI) while its source Ingress/HTTPRoute/Monitor still exists, the
    operator recreates or corrects it on its next reconcile of that
-   resource — at most `driftCheckInterval` (default `5m`) later, even with
-   no other trigger. Set `--set driftCheckInterval=30s` for faster
-   recovery.
+   resource — at most `driftCheckInterval` (default `30s`) later, even with
+   no other trigger. Set `--set driftCheckInterval=5m` for a lighter check
+   cadence.
+
+   The operator logs every Kuma monitor it creates, updates, or deletes at
+   Info level (the default). Set `--set logLevel=debug` for per-reconcile
+   detail — what triggered a reconcile and which decision branch was taken
+   (skip, full sync, drift correction, etc).
 
 4. Or declare a monitor Kuma can't derive from routing (DNS, Gamedig, TCP,
    Ping) with a `Monitor` CR — see

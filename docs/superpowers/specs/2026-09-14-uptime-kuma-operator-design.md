@@ -87,7 +87,8 @@ KUMA_USERNAME / KUMA_PASSWORD   (from Secret)
 WATCH_NAMESPACES=prod,staging    # empty/unset = operator's own namespace only
 WATCH_ALL=false                  # true = watch every namespace (namespace scope only)
 OPT_IN_BY_DEFAULT=false          # true = sync everything not explicitly opted out
-DRIFT_CHECK_INTERVAL=5m          # Go duration string; how often to re-check Kuma for out-of-band deletions
+DRIFT_CHECK_INTERVAL=30s         # Go duration string; how often to re-check Kuma for out-of-band deletions
+LOG_LEVEL=info                   # debug | info | warn | error
 ```
 
 `WATCH_ALL` and `OPT_IN_BY_DEFAULT` are deliberately independent: `WATCH_ALL`
@@ -97,9 +98,9 @@ on the annotation contract below — watching every namespace does not exempt
 a resource from needing `uptime-kuma.io/enabled=true`. Only
 `OPT_IN_BY_DEFAULT` controls that.
 
-Changing `WATCH_NAMESPACES`, `WATCH_ALL`, `OPT_IN_BY_DEFAULT`, or
-`DRIFT_CHECK_INTERVAL` requires a pod restart (no hot-reload watcher) —
-acceptable since these change rarely.
+Changing `WATCH_NAMESPACES`, `WATCH_ALL`, `OPT_IN_BY_DEFAULT`,
+`DRIFT_CHECK_INTERVAL`, or `LOG_LEVEL` requires a pod restart (no
+hot-reload watcher) — acceptable since these change rarely.
 
 Startup fails fast (non-zero exit, no retry) if Kuma credentials are
 invalid — there's no point running controllers that can never sync.
@@ -438,3 +439,19 @@ reconcilers disabled — the same shape used here.
   instance: `Base.Type()`/`Base.As()` round-trip correctly on a monitor
   fetched via `GetMonitors`, and `ExistingSpecs` correctly observes an
   out-of-band edit made through a second, independent client connection.
+- **Follow-up: added action + debug logging.** Reconcilers called
+  Upsert/Delete silently — the only way to see what the operator did to
+  Kuma was to watch Kuma itself. Added an Info-level log line at every
+  action site (create/update/delete, and for drift: recreate/correct)
+  naming the host or monitor and the resulting Kuma ID — always on, no
+  config needed. Separately, added `LOG_LEVEL` (`config.Config.LogLevel`,
+  env var `LOG_LEVEL`, one of debug/info/warn/error, default info) wired
+  into `cmd/main.go`'s zap logger (`zap.Level(...)`), and `log.V(1).Info`
+  calls at each reconciler's decision points (what triggered the
+  reconcile, which branch was taken: skip/opt-out, hash unchanged vs.
+  changed, drift found vs. not) — visible only at `LOG_LEVEL=debug`, since
+  logr's `V(1)` maps to zap's `DebugLevel` (`toZapLevel(lvl) = 0 -
+  zapcore.Level(lvl)`, confirmed via `go-logr/zapr`'s source). Verified
+  with a fake-client smoke test that debug lines are absent at the
+  default Info level and present at Debug, while action logs stay visible
+  at both.

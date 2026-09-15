@@ -22,7 +22,7 @@ func TestLoad_MinimalValid(t *testing.T) {
 	}
 	want := Config{
 		KumaURL: "https://kuma.example.com", KumaUsername: "admin", KumaPassword: "secret",
-		WatchNamespaces: []string{"default"}, DriftCheckInterval: DefaultDriftCheckInterval,
+		WatchNamespaces: []string{"default"}, DriftCheckInterval: DefaultDriftCheckInterval, LogLevel: "info",
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("Load = %+v, want %+v", cfg, want)
@@ -183,6 +183,50 @@ func TestLoad_DriftCheckIntervalRejectsNonPositive(t *testing.T) {
 	}))
 	if err == nil {
 		t.Fatal("expected error for non-positive DRIFT_CHECK_INTERVAL, got nil")
+	}
+}
+
+func TestLoad_LogLevelDefaultsToInfo(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":      "https://kuma.example.com",
+		"KUMA_USERNAME": "admin",
+		"KUMA_PASSWORD": "secret",
+		"POD_NAMESPACE": "default",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.LogLevel != "info" {
+		t.Errorf("LogLevel = %q, want default %q", cfg.LogLevel, "info")
+	}
+}
+
+func TestLoad_LogLevelAcceptsValidValuesCaseInsensitively(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":      "https://kuma.example.com",
+		"KUMA_USERNAME": "admin",
+		"KUMA_PASSWORD": "secret",
+		"POD_NAMESPACE": "default",
+		"LOG_LEVEL":     "DEBUG",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.LogLevel != "debug" {
+		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, "debug")
+	}
+}
+
+func TestLoad_LogLevelRejectsInvalidValue(t *testing.T) {
+	_, err := Load(envMap(map[string]string{
+		"KUMA_URL":      "https://kuma.example.com",
+		"KUMA_USERNAME": "admin",
+		"KUMA_PASSWORD": "secret",
+		"POD_NAMESPACE": "default",
+		"LOG_LEVEL":     "verbose",
+	}))
+	if err == nil {
+		t.Fatal("expected error for invalid LOG_LEVEL, got nil")
 	}
 }
 

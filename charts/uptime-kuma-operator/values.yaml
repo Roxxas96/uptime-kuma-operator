@@ -19,3 +19,8 @@ optInByDefault: false
 # still has the monitor(s) it's supposed to, recreating any deleted
 # out-of-band (e.g. manually in the Kuma UI). Go duration string.
 driftCheckInterval: 30s
+
+# One of "debug", "info" (default), "warn", "error". "debug" adds
+# per-reconcile detail (what triggered a reconcile, which decision branch
+# was taken) on top of the always-on create/update/delete action logs.
+logLevel: info
