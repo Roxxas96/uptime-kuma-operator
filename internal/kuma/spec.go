@@ -54,6 +54,13 @@ type TCPSpec struct {
 
 type PingSpec struct {
 	Host string
+
+	// Timeout is the per-ping timeout in seconds. 0 = use Kuma default.
+	Timeout int64
+	// PacketSize is the ICMP packet size in bytes. 0 = use Kuma default.
+	PacketSize int
+	// DomainExpiryNotification enables domain expiry notifications.
+	DomainExpiryNotification bool
 }
 
 type DNSSpec struct {
@@ -61,6 +68,9 @@ type DNSSpec struct {
 	ResolverServer string
 	ResolveType    string
 	Port           int
+
+	// DomainExpiryNotification enables domain expiry notifications.
+	DomainExpiryNotification bool
 }
 
 type GamedigSpec struct {

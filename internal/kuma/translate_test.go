@@ -315,3 +315,75 @@ func TestEquivalent_DetectsDrift_TCPFields(t *testing.T) {
 		t.Error("Equivalent(base, changedTLSMode) = true, want false")
 	}
 }
+
+func TestFromBremlMonitor_RoundTripsThroughToBremlMonitor_PingFields(t *testing.T) {
+	spec := MonitorSpec{
+		Type: TypePing, Name: "ping-check",
+		Ping: &PingSpec{Host: "10.0.0.1", Timeout: 5, PacketSize: 64, DomainExpiryNotification: true},
+	}
+
+	mon, err := ToBremlMonitor(7, spec)
+	if err != nil {
+		t.Fatalf("ToBremlMonitor: %v", err)
+	}
+	data, err := json.Marshal(mon)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var base bremlmonitor.Base
+	if err := json.Unmarshal(data, &base); err != nil {
+		t.Fatalf("unmarshal into Base: %v", err)
+	}
+
+	got, err := FromBremlMonitor(base)
+	if err != nil {
+		t.Fatalf("FromBremlMonitor: %v", err)
+	}
+	if !Equivalent(spec, got) {
+		t.Errorf("FromBremlMonitor(round-tripped ToBremlMonitor(%+v)) = %+v, want an equivalent spec", spec, got)
+	}
+}
+
+func TestFromBremlMonitor_RoundTripsThroughToBremlMonitor_DNSFields(t *testing.T) {
+	spec := MonitorSpec{
+		Type: TypeDNS, Name: "dns-check",
+		DNS: &DNSSpec{Host: "example.com", ResolverServer: "1.1.1.1", ResolveType: "A", DomainExpiryNotification: true},
+	}
+
+	mon, err := ToBremlMonitor(7, spec)
+	if err != nil {
+		t.Fatalf("ToBremlMonitor: %v", err)
+	}
+	data, err := json.Marshal(mon)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var base bremlmonitor.Base
+	if err := json.Unmarshal(data, &base); err != nil {
+		t.Fatalf("unmarshal into Base: %v", err)
+	}
+
+	got, err := FromBremlMonitor(base)
+	if err != nil {
+		t.Fatalf("FromBremlMonitor: %v", err)
+	}
+	if !Equivalent(spec, got) {
+		t.Errorf("FromBremlMonitor(round-tripped ToBremlMonitor(%+v)) = %+v, want an equivalent spec", spec, got)
+	}
+}
+
+func TestEquivalent_DetectsDrift_PingAndDNSFields(t *testing.T) {
+	basePing := MonitorSpec{Type: TypePing, Name: "ping-check", Ping: &PingSpec{Host: "10.0.0.1", Timeout: 5}}
+	changedPingTimeout := basePing
+	changedPingTimeout.Ping = &PingSpec{Host: "10.0.0.1", Timeout: 10}
+	if Equivalent(basePing, changedPingTimeout) {
+		t.Error("Equivalent(basePing, changedPingTimeout) = true, want false")
+	}
+
+	baseDNS := MonitorSpec{Type: TypeDNS, Name: "dns-check", DNS: &DNSSpec{Host: "example.com", ResolverServer: "1.1.1.1", ResolveType: "A"}}
+	changedDNSExpiry := baseDNS
+	changedDNSExpiry.DNS = &DNSSpec{Host: "example.com", ResolverServer: "1.1.1.1", ResolveType: "A", DomainExpiryNotification: true}
+	if Equivalent(baseDNS, changedDNSExpiry) {
+		t.Error("Equivalent(baseDNS, changedDNSExpiry) = true, want false")
+	}
+}
