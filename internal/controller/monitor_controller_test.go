@@ -182,6 +182,16 @@ func TestMonitorReconciler_SecondReconcileDoesNotWriteStatus(t *testing.T) {
 	if len(fake.Monitors) != 1 {
 		t.Errorf("expected the existing Kuma monitor to be reused, got %d", len(fake.Monitors))
 	}
+	// The real bug this guards against: a Kuma monitor stuck showing only
+	// ever having completed one check. kuma.Client.Upsert (editMonitor)
+	// restarts the monitor's check timer even on an unchanged payload, so a
+	// no-op reconcile (nothing changed since the last successful sync) must
+	// not call it at all — len(fake.Monitors) alone can't catch this, since
+	// Upsert with a nonzero id overwrites the same map key whether it's
+	// called once or a hundred times.
+	if fake.UpsertCalls != 1 {
+		t.Errorf("Kuma Upsert called %d times across two identical reconciles, want 1 — a no-op reconcile must not re-sync an unchanged monitor", fake.UpsertCalls)
+	}
 }
 
 func TestMonitorReconciler_KumaFailureSetsReadyFalse(t *testing.T) {

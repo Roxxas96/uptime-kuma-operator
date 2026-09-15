@@ -62,7 +62,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// Drop the monitor-ids annotation *and* the finalizer: an opted-out
 		// resource is no longer ours, and a lingering finalizer would block
 		// its deletion forever if the operator is uninstalled.
-		return ctrl.Result{}, persistMonitorIDs(ctx, r.Client, ing, nil, false)
+		return ctrl.Result{}, persistMonitorIDs(ctx, r.Client, ing, nil, false, "")
 	}
 
 	ov, err := annotations.ParseOverrides(ing.Annotations)
@@ -75,13 +75,24 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	desired := derive.IngressMonitors(ing, ov)
+	hash, err := desiredHash(desired)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if hash == annotations.ParseSyncedHash(ing.Annotations) {
+		// Nothing relevant (rules or override annotations) changed since the
+		// last successful sync — skip the Kuma round-trip. See desiredHash's
+		// doc comment for why this matters.
+		return ctrl.Result{}, nil
+	}
+
 	newIDs, err := syncMonitors(ctx, r.Kuma, desired, existingIDs)
 	if err != nil {
 		recordSyncFailure(r.Recorder, ing, err)
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, persistMonitorIDs(ctx, r.Client, ing, newIDs, true)
+	return ctrl.Result{}, persistMonitorIDs(ctx, r.Client, ing, newIDs, true, hash)
 }
 
 func (r *IngressReconciler) SetupWithManager(mgr ctrl.Manager) error {

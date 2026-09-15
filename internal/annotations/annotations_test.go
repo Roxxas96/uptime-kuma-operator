@@ -82,6 +82,28 @@ func TestSetMonitorIDs_EmptyRemovesAnnotation(t *testing.T) {
 	}
 }
 
+func TestSyncedHashRoundTrip(t *testing.T) {
+	ann := map[string]string{}
+	ann = SetSyncedHash(ann, "deadbeef")
+	if got := ParseSyncedHash(ann); got != "deadbeef" {
+		t.Errorf("ParseSyncedHash = %q, want %q", got, "deadbeef")
+	}
+}
+
+func TestSetSyncedHash_EmptyRemovesAnnotation(t *testing.T) {
+	ann := map[string]string{SyncedHash: "deadbeef"}
+	ann = SetSyncedHash(ann, "")
+	if _, ok := ann[SyncedHash]; ok {
+		t.Error("SyncedHash annotation still present after clearing to empty string")
+	}
+}
+
+func TestParseSyncedHash_MissingAnnotationIsEmptyString(t *testing.T) {
+	if got := ParseSyncedHash(nil); got != "" {
+		t.Errorf("ParseSyncedHash(nil) = %q, want empty string", got)
+	}
+}
+
 func TestParseMonitorIDs_MissingAnnotationIsEmptyMap(t *testing.T) {
 	got, err := ParseMonitorIDs(nil)
 	if err != nil {

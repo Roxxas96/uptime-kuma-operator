@@ -16,6 +16,14 @@ type FakeClient struct {
 
 	UpsertErr error
 	DeleteErr error
+
+	// UpsertCalls and DeleteCalls count invocations, including ones that
+	// returned an error — reconcilers should call Upsert only when the
+	// desired Kuma configuration actually changed, since a real Upsert
+	// (editMonitor) restarts that monitor's check timer even on an
+	// unchanged payload.
+	UpsertCalls int
+	DeleteCalls int
 }
 
 func NewFakeClient() *FakeClient {
@@ -25,6 +33,7 @@ func NewFakeClient() *FakeClient {
 func (f *FakeClient) Upsert(_ context.Context, id int64, spec MonitorSpec) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.UpsertCalls++
 	if f.UpsertErr != nil {
 		return 0, f.UpsertErr
 	}
@@ -39,6 +48,7 @@ func (f *FakeClient) Upsert(_ context.Context, id int64, spec MonitorSpec) (int6
 func (f *FakeClient) Delete(_ context.Context, id int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.DeleteCalls++
 	if f.DeleteErr != nil {
 		return f.DeleteErr
 	}

@@ -80,8 +80,16 @@ type MonitorSpec struct {
 
 // +kubebuilder:object:generate=true
 type MonitorStatus struct {
-	MonitorID  string             `json:"monitorID,omitempty"`
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	MonitorID string `json:"monitorID,omitempty"`
+	// ObservedGeneration is the .metadata.generation last successfully
+	// synced to Kuma. The reconciler skips the Kuma round-trip when it
+	// already matches .metadata.generation — kuma.Client.Upsert (editMonitor)
+	// restarts the monitor's check timer even on an unchanged payload, so
+	// calling it on every reconcile (including ones triggered by something
+	// other than a spec change) would prevent the monitor from ever
+	// completing more than one check cycle.
+	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
+	Conditions         []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

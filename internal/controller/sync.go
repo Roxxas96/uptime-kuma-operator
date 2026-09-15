@@ -2,6 +2,9 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -15,6 +18,28 @@ import (
 	"uptime-kuma-operator/internal/derive"
 	"uptime-kuma-operator/internal/kuma"
 )
+
+// desiredHash returns a stable fingerprint of desired (the derived monitor
+// set for an Ingress/HTTPRoute — a function of both .spec and the override
+// annotations). Reconcilers compare this against the SyncedHash annotation
+// from the last successful sync to decide whether to call syncMonitors at
+// all.
+//
+// This matters because kuma.Client.Upsert (editMonitor) restarts the
+// monitor's check timer on Kuma's side even when the payload is byte-for-byte
+// unchanged. Without this guard, syncMonitors would run on every reconcile
+// — including ones triggered by something unrelated to this monitor's own
+// configuration (annotation churn from other tooling, an informer resync, an
+// error-triggered requeue) — and a resource reconciled more often than its
+// configured check interval would never complete more than one check cycle.
+func desiredHash(desired []derive.DesiredMonitor) (string, error) {
+	b, err := json.Marshal(desired)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:]), nil
+}
 
 // syncMonitors upserts one monitor per desired host (reusing existingIDs[host]
 // when present) and deletes any host present in existingIDs but absent from
@@ -86,14 +111,16 @@ func deleteAllMonitors(ctx context.Context, kc kuma.Client, ann map[string]strin
 	return nil
 }
 
-// persistMonitorIDs writes newIDs into obj's monitor-ids annotation and adds or
-// removes the operator finalizer, retrying on conflict.
+// persistMonitorIDs writes newIDs and hash into obj's annotations and adds or
+// removes the operator finalizer, retrying on conflict. hash is the
+// desiredHash of what was just synced ("" clears it, e.g. on opt-out — there
+// is no "last synced state" to remember once a resource is no longer ours).
 //
 // The retry matters: the Kuma monitors have already been created by the time
 // this runs, so losing the write to a routine conflict (another controller
 // touching .status, a concurrent reconcile) would make the next reconcile
 // upsert with id=0 and orphan the monitors it just created.
-func persistMonitorIDs(ctx context.Context, c client.Client, obj client.Object, newIDs map[string]string, wantFinalizer bool) error {
+func persistMonitorIDs(ctx context.Context, c client.Client, obj client.Object, newIDs map[string]string, wantFinalizer bool, hash string) error {
 	key := client.ObjectKeyFromObject(obj)
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		if err := c.Get(ctx, key, obj); err != nil {
@@ -104,6 +131,7 @@ func persistMonitorIDs(ctx context.Context, c client.Client, obj client.Object, 
 			ann = map[string]string{}
 		}
 		annotations.SetMonitorIDs(ann, newIDs)
+		annotations.SetSyncedHash(ann, hash)
 		obj.SetAnnotations(ann)
 		if wantFinalizer {
 			controllerutil.AddFinalizer(obj, annotations.Finalizer)

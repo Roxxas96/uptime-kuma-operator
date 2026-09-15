@@ -111,6 +111,7 @@ invalid — there's no point running controllers that can never sync.
 | `uptime-kuma.io/max-retries` | Optional. |
 | `uptime-kuma.io/accepted-statuscodes` | Comma-separated list. Optional. |
 | `uptime-kuma.io/monitor-ids` | **Operator-written.** JSON map `{"host": "kumaMonitorID"}`. One Ingress/HTTPRoute can expand into multiple monitors (one per host). |
+| `uptime-kuma.io/synced-hash` | **Operator-written.** SHA-256 fingerprint of the derived monitor set as of the last successful sync — lets the reconciler skip the Kuma round-trip entirely when nothing relevant changed. |
 
 ## Reconciliation flow — Ingress & HTTPRoute
 
@@ -134,12 +135,21 @@ Both controllers share this logic:
      - HTTPRoute: one per `spec.hostnames[]`; scheme `https` by default,
        overridable per-resource via `uptime-kuma.io/scheme` (no Gateway/
        Listener inspection — out of scope, see clarifying Q&A).
-   - For each host: `kuma.Upsert(ctx, monitor-ids[host], spec)` — creates if
-     no existing ID, updates in place otherwise.
+   - Hash the derived set and compare against the `uptime-kuma.io/synced-hash`
+     annotation from the last successful sync. **If they match, stop here —
+     do not call Kuma at all.** `kuma.Upsert` (Kuma's `editMonitor`) restarts
+     that monitor's check timer even when the payload is byte-for-byte
+     unchanged, so calling it on every reconcile — including ones triggered
+     by something unrelated to this monitor's configuration (annotation
+     churn from other tooling, an informer resync, an error-triggered
+     requeue) — means the monitor never completes more than one check cycle.
+     This was a real, shipped bug (see the decisions log).
+   - Otherwise: for each host, `kuma.Upsert(ctx, monitor-ids[host], spec)` —
+     creates if no existing ID, updates in place otherwise.
    - For hosts previously in `monitor-ids` but no longer present in the
      spec: `kuma.Delete`.
-   - Patch `monitor-ids` with the resulting map. Ensure finalizer
-     `uptime-kuma.io/finalizer` is present.
+   - Patch `monitor-ids` and `synced-hash` with the resulting state. Ensure
+     finalizer `uptime-kuma.io/finalizer` is present.
 6. On delete (finalizer path): read `monitor-ids`, delete every listed Kuma
    monitor, remove the finalizer.
 
@@ -176,6 +186,7 @@ spec:
     acceptedStatusCodes: ["200-299"]
 status:
   monitorID: "42"
+  observedGeneration: 3
   conditions:
     - type: Ready
       status: "True"
@@ -189,6 +200,11 @@ status:
 - `status.monitorID` is this CRD's ownership-tracking mechanism (the CRD
   equivalent of the `monitor-ids` annotation on Ingress/HTTPRoute) — natural
   fit since we own the schema.
+- `status.observedGeneration` is the `synced-hash` annotation's CRD
+  equivalent: the reconciler skips the Kuma round-trip when it already
+  matches `.metadata.generation` (which, with a status subresource, only
+  changes on real `.spec` edits — annotation/metadata churn doesn't bump it,
+  so unlike Ingress/HTTPRoute this CRD doesn't need a content hash).
 - Finalizer `uptime-kuma.io/finalizer` ensures the Kuma monitor is deleted
   before the CR is removed from etcd.
 - Starts with HTTP, TCP, Ping, DNS, Gamedig. Additional types are additive
@@ -288,3 +304,50 @@ reconcilers disabled — the same shape used here.
   only, and a new `OPT_IN_BY_DEFAULT` governs the annotation policy. Watching
   every namespace no longer implies exempting resources from the opt-in
   annotation.
+- **Bug fix (post-implementation): Kuma was called on every reconcile,
+  regardless of relevance.** All three reconcilers called `kuma.Client.Upsert`
+  (Kuma's `editMonitor`) unconditionally, with no check for whether the
+  desired configuration had actually changed since the last successful sync.
+  `editMonitor` restarts the monitor's check timer on Kuma's side even when
+  the payload is byte-for-byte identical — so any reconcile trigger unrelated
+  to the monitor's own config (annotation churn from other tooling, an
+  informer resync, an error-triggered requeue) reset that monitor's check
+  cycle, and a resource reconciled more often than its configured interval
+  would never complete more than one check. Fixed by tracking "last
+  successfully synced state" and skipping the Kuma call when it's unchanged:
+  a content hash in a new `synced-hash` annotation for Ingress/HTTPRoute
+  (their desired state depends on both `.spec` and override annotations), and
+  the standard `.status.observedGeneration` vs `.metadata.generation` idiom
+  for the `Monitor` CRD (whose `.spec` alone determines desired state).
+  Caught from a user report of a monitor "stuck at 1 check"; reproduced
+  directly against a real Kuma instance (repeated identical `editMonitor`
+  calls force immediate rechecks at the edit frequency, not the configured
+  interval) before fixing.
+- **Bug fix (post-implementation): `kuma.NewClient`'s deadlock fix broke
+  every call after the first.** An earlier fix for a startup deadlock (see
+  below) wrapped the connection context in `context.WithTimeout` and
+  deferred its cancellation. `bremlkuma.New` retains that same context for
+  the connection's entire lifetime (its background goroutines treat
+  `ctx.Done()` as a shutdown signal, not just a connect-attempt deadline),
+  so the deferred cancel — firing the moment `NewClient` returned —
+  silently killed the connection right after a successful first use. Every
+  subsequent `Upsert`/`Delete` call failed with "context canceled". Fixed by
+  relying solely on `bremlkuma.WithConnectTimeout` (which bounds the connect
+  attempt independently of the passed context) and no longer wrapping or
+  canceling the caller's context at all. Caught by the integration test
+  against a real Kuma instance — the reconciler-level tests all use
+  `FakeClient` and never exercised this path.
+- **Bug fix (post-implementation): initial connection could hang forever,
+  crashing the process.** `cmd/main.go` called `kuma.NewClient` with
+  `context.Background()` — no deadline. A stalled connection (bad URL,
+  network partition, a proxy that mangles Socket.IO's long-polling/WebSocket
+  upgrade) blocked `bremlkuma.New` forever on a `select` whose only escape
+  hatches (`ctx.Done()`, an optional connect-timeout) were never wired up.
+  Since this runs before the manager creates any other goroutines, the whole
+  process was just 3 goroutines, all permanently blocked — which Go's
+  runtime reports as `fatal error: all goroutines are asleep - deadlock!`
+  and crashes on. Fixed by always passing `bremlkuma.WithConnectTimeout`
+  (30s) in `kuma.NewClient` (see the entry above for the regression this
+  introduced, and its fix). Caught from a user-reported crash in a real
+  cluster; reproduced locally with a TCP listener that accepts connections
+  but never responds.

@@ -62,7 +62,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// Drop the monitor-ids annotation *and* the finalizer: an opted-out
 		// resource is no longer ours, and a lingering finalizer would block
 		// its deletion forever if the operator is uninstalled.
-		return ctrl.Result{}, persistMonitorIDs(ctx, r.Client, route, nil, false)
+		return ctrl.Result{}, persistMonitorIDs(ctx, r.Client, route, nil, false, "")
 	}
 
 	ov, err := annotations.ParseOverrides(route.Annotations)
@@ -75,13 +75,24 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	desired := derive.HTTPRouteMonitors(route, ov)
+	hash, err := desiredHash(desired)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if hash == annotations.ParseSyncedHash(route.Annotations) {
+		// Nothing relevant (hostnames or override annotations) changed since
+		// the last successful sync — skip the Kuma round-trip. See
+		// desiredHash's doc comment for why this matters.
+		return ctrl.Result{}, nil
+	}
+
 	newIDs, err := syncMonitors(ctx, r.Kuma, desired, existingIDs)
 	if err != nil {
 		recordSyncFailure(r.Recorder, route, err)
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, persistMonitorIDs(ctx, r.Client, route, newIDs, true)
+	return ctrl.Result{}, persistMonitorIDs(ctx, r.Client, route, newIDs, true, hash)
 }
 
 func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
