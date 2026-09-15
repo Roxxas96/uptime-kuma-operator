@@ -194,6 +194,78 @@ func TestMonitorReconciler_SecondReconcileDoesNotWriteStatus(t *testing.T) {
 	}
 }
 
+// TestMonitorReconciler_RecreatesMonitorDeletedOutOfBand is the other half
+// of the no-op-reconcile fix above: skipping Kuma when nothing changed must
+// not mean skipping it forever. If the monitor is deleted directly in Kuma
+// (not through the operator), the next reconcile — even with an unchanged
+// spec — must notice via ExistingIDs and recreate it, since the source
+// (this Monitor CR) is still present.
+func TestMonitorReconciler_RecreatesMonitorDeletedOutOfBand(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newMonitorReconciler(t)
+
+	mon := &uptimekumaiov1alpha1.Monitor{
+		ObjectMeta: metav1.ObjectMeta{Name: "drifted", Namespace: "default"},
+		Spec: uptimekumaiov1alpha1.MonitorSpec{
+			Type: uptimekumaiov1alpha1.MonitorTypePing,
+			Ping: &uptimekumaiov1alpha1.PingMonitorSpec{Host: "10.0.0.11"},
+		},
+	}
+	if err := k8sClient.Create(ctx, mon); err != nil {
+		t.Fatalf("create Monitor: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mon.Name, Namespace: mon.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, mon)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("first Reconcile: %v", err)
+	}
+	first := &uptimekumaiov1alpha1.Monitor{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, first); err != nil {
+		t.Fatalf("get after first reconcile: %v", err)
+	}
+	originalID := first.Status.MonitorID
+	if originalID == "" {
+		t.Fatal("status.monitorID not set after first reconcile")
+	}
+
+	// Simulate an operator deleting the monitor directly in Kuma, out of
+	// band — the Monitor CR itself is untouched, spec unchanged.
+	numericID, err := strconv.ParseInt(originalID, 10, 64)
+	if err != nil {
+		t.Fatalf("parse monitor id: %v", err)
+	}
+	if err := fake.Delete(ctx, numericID); err != nil {
+		t.Fatalf("simulate out-of-band delete: %v", err)
+	}
+	fake.DeleteCalls = 0 // reset: that was test setup, not something Reconcile did
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("second Reconcile (should recreate): %v", err)
+	}
+
+	second := &uptimekumaiov1alpha1.Monitor{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, second); err != nil {
+		t.Fatalf("get after second reconcile: %v", err)
+	}
+	if second.Status.MonitorID == "" {
+		t.Fatal("status.monitorID empty after recreation")
+	}
+	if second.Status.MonitorID == originalID {
+		t.Errorf("status.monitorID unchanged (%s) — the deleted monitor's id can't have been reused, it must be a fresh one", originalID)
+	}
+	if len(fake.Monitors) != 1 {
+		t.Errorf("expected exactly 1 monitor in Kuma after recreation, got %d", len(fake.Monitors))
+	}
+	newID, _ := strconv.ParseInt(second.Status.MonitorID, 10, 64)
+	if _, ok := fake.Monitors[newID]; !ok {
+		t.Errorf("fake Kuma client has no monitor with the recorded id %d", newID)
+	}
+}
+
 func TestMonitorReconciler_KumaFailureSetsReadyFalse(t *testing.T) {
 	ctx := context.Background()
 	r, fake := newMonitorReconciler(t)

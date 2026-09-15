@@ -60,12 +60,6 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	if mon.Status.MonitorID != "" && mon.Status.ObservedGeneration == mon.Generation {
-		// Nothing changed since the last successful sync — skip the Kuma
-		// round-trip. See MonitorStatus.ObservedGeneration's doc comment.
-		return ctrl.Result{}, nil
-	}
-
 	var existingID int64
 	if mon.Status.MonitorID != "" {
 		id, err := strconv.ParseInt(mon.Status.MonitorID, 10, 64)
@@ -75,6 +69,20 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		} else {
 			existingID = id
 		}
+	}
+
+	if existingID != 0 && mon.Status.ObservedGeneration == mon.Generation {
+		liveIDs, err := r.Kuma.ExistingIDs(ctx)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if liveIDs[existingID] {
+			// Nothing changed and Kuma still has it — nothing to do, but
+			// check again later in case it's deleted out-of-band.
+			return ctrl.Result{RequeueAfter: driftCheckInterval}, nil
+		}
+		log.Info("Kuma monitor no longer exists, recreating", "monitorID", mon.Status.MonitorID)
+		existingID = 0 // force a create — the old id is gone, an update would fail
 	}
 
 	generationToSync := mon.Generation
@@ -91,7 +99,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: driftCheckInterval}, nil
 }
 
 // updateStatus applies the Kuma monitor ID (when non-empty) and the Ready

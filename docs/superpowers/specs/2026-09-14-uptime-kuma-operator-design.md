@@ -59,20 +59,21 @@ warn about this at runtime; it's an operational precondition.
 package kuma
 
 type Client interface {
-    Upsert(ctx context.Context, id string, spec MonitorSpec) (newID string, err error)
-
-```go
-package kuma
-
-type Client interface {
-    Upsert(ctx context.Context, id string, spec MonitorSpec) (newID string, err error)
-    Delete(ctx context.Context, id string) error
+    Upsert(ctx context.Context, id int64, spec MonitorSpec) (newID int64, err error)
+    Delete(ctx context.Context, id int64) error
+    // ExistingIDs supports drift detection (see "Recreate on Kuma-side
+    // deletion" in the decisions log) — a cheap, non-mutating list call
+    // reconcilers use to check whether a tracked monitor still exists,
+    // instead of an Upsert/editMonitor round-trip per candidate.
+    ExistingIDs(ctx context.Context) (map[int64]bool, error)
 }
 ```
 
 Wrapping it means a future swap (if the library stalls or lacks a monitor
 type we need, e.g. Gamedig edge cases) only touches this one seam, not every
-controller. `Upsert` takes an existing ID (empty string = create).
+controller. `Upsert` takes an existing ID (0 = create) — the implementation
+uses `int64` (breml's own monitor ID type) rather than `string`, an
+improvement made during implementation.
 
 ### Operator-wide configuration
 
@@ -136,20 +137,34 @@ Both controllers share this logic:
        overridable per-resource via `uptime-kuma.io/scheme` (no Gateway/
        Listener inspection — out of scope, see clarifying Q&A).
    - Hash the derived set and compare against the `uptime-kuma.io/synced-hash`
-     annotation from the last successful sync. **If they match, stop here —
-     do not call Kuma at all.** `kuma.Upsert` (Kuma's `editMonitor`) restarts
-     that monitor's check timer even when the payload is byte-for-byte
-     unchanged, so calling it on every reconcile — including ones triggered
-     by something unrelated to this monitor's configuration (annotation
-     churn from other tooling, an informer resync, an error-triggered
-     requeue) — means the monitor never completes more than one check cycle.
-     This was a real, shipped bug (see the decisions log).
-   - Otherwise: for each host, `kuma.Upsert(ctx, monitor-ids[host], spec)` —
-     creates if no existing ID, updates in place otherwise.
-   - For hosts previously in `monitor-ids` but no longer present in the
-     spec: `kuma.Delete`.
-   - Patch `monitor-ids` and `synced-hash` with the resulting state. Ensure
-     finalizer `uptime-kuma.io/finalizer` is present.
+     annotation from the last successful sync.
+     - **If they differ** (a real config change): for each host,
+       `kuma.Upsert(ctx, monitor-ids[host], spec)` — creates if no existing
+       ID, updates in place otherwise. For hosts previously in `monitor-ids`
+       but no longer present in the spec: `kuma.Delete`. Patch `monitor-ids`
+       and `synced-hash` with the resulting state.
+     - **If they match**, do NOT blindly stop: `kuma.Upsert` (Kuma's
+       `editMonitor`) restarts a monitor's check timer even when the payload
+       is byte-for-byte unchanged, so calling it on every reconcile —
+       including ones triggered by something unrelated to this monitor's
+       configuration (annotation churn from other tooling, an informer
+       resync, an error-triggered requeue) — would mean the monitor never
+       completes more than one check cycle (a real, shipped bug — see the
+       decisions log). So instead: call `kuma.ExistingIDs` (one cheap,
+       non-mutating list call) and check every host's tracked ID is still
+       present.
+       - All present → nothing to do. Requeue after `driftCheckInterval`
+         (5 minutes) to check again later.
+       - Any missing (deleted out-of-band, e.g. manually in the Kuma UI) →
+         recreate only the missing host(s) (`kuma.Upsert(ctx, 0, spec)`),
+         leaving every host that's still present completely untouched — no
+         edit call for them, so the redundant-editMonitor bug can't recur
+         here either. Patch `monitor-ids` with the updated map (`synced-hash`
+         is unchanged, since the desired config itself didn't change).
+   - Ensure finalizer `uptime-kuma.io/finalizer` is present in either case.
+   - Requeue after `driftCheckInterval` on every successful path above, so
+     drift is caught even when nothing on the Kubernetes side ever changes
+     again.
 6. On delete (finalizer path): read `monitor-ids`, delete every listed Kuma
    monitor, remove the finalizer.
 
@@ -215,8 +230,15 @@ status:
 1. Fetch the CR. Not found → nothing to do.
 2. On delete (finalizer path): if `status.monitorID` is set, `kuma.Delete`
    it, then remove the finalizer.
-3. Otherwise: `kuma.Upsert(ctx, status.monitorID, spec)`, patch
-   `status.monitorID` and the `Ready` condition, ensure finalizer present.
+3. If `status.monitorID` is set and `status.observedGeneration ==
+   .metadata.generation`: call `kuma.ExistingIDs` and check the ID is still
+   present.
+   - Present → nothing to do; requeue after `driftCheckInterval`.
+   - Missing (deleted out-of-band) → recreate: `kuma.Upsert(ctx, 0, spec)`.
+4. Otherwise (spec changed, or recreating after drift):
+   `kuma.Upsert(ctx, status.monitorID, spec)`, patch `status.monitorID`,
+   `status.observedGeneration`, and the `Ready` condition, ensure finalizer
+   present, requeue after `driftCheckInterval`.
 
 Unlike Ingress/HTTPRoute, there's no opt-in/opt-out annotation logic here —
 declaring the CR *is* the opt-in.
@@ -351,3 +373,22 @@ reconcilers disabled — the same shape used here.
   introduced, and its fix). Caught from a user-reported crash in a real
   cluster; reproduced locally with a TCP listener that accepts connections
   but never responds.
+- **Feature (post-implementation, expected behavior): recreate a monitor
+  deleted directly in Kuma, if its source resource is still present.**
+  Skipping the Kuma round-trip when nothing changed (the fix above) has a
+  side effect: the operator would never notice a monitor deleted
+  out-of-band (e.g. manually in the Kuma UI), since nothing on the
+  Kubernetes side changes to re-trigger a reconcile. Fixed by adding
+  `kuma.Client.ExistingIDs` (one `GetMonitors` list call — cheap and
+  non-mutating, unlike a per-ID `GetMonitor`, whose only "not found" signal
+  turned out to be Kuma's raw, version-fragile JS error string rather than
+  a typed error) and a periodic drift check: on the "nothing changed" path,
+  every reconciler now verifies its tracked ID(s) still exist before doing
+  nothing, and requeues after `driftCheckInterval` (5 minutes) so it checks
+  again later even if the Kubernetes resource is never touched again. A
+  missing monitor is recreated with a fresh Upsert(id=0, ...); for
+  Ingress/HTTPRoute (which can track several monitors per resource), only
+  the missing host(s) are recreated — hosts still present are left
+  completely untouched, so this can't reintroduce the redundant-editMonitor
+  bug it's built next to. Verified `ExistingIDs` against a real Kuma
+  instance (not just `FakeClient`) before relying on it.

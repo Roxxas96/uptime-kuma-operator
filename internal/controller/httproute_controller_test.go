@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -138,6 +139,85 @@ func TestHTTPRouteReconciler_SecondReconcileReusesExistingMonitor(t *testing.T) 
 	}
 	if firstIDs["app.example.com"] == "" || firstIDs["app.example.com"] != secondIDs["app.example.com"] {
 		t.Errorf("monitor id changed across reconciles: %v -> %v", firstIDs, secondIDs)
+	}
+}
+
+// TestHTTPRouteReconciler_RecreatesMonitorDeletedOutOfBand mirrors
+// TestIngressReconciler_RecreatesMonitorDeletedOutOfBand: skipping Kuma
+// when the synced-hash is unchanged must not mean skipping it forever. If a
+// monitor is deleted directly in Kuma, the next reconcile must notice via
+// ExistingIDs and recreate just that one, leaving healthy hosts untouched.
+func TestHTTPRouteReconciler_RecreatesMonitorDeletedOutOfBand(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newHTTPRouteReconciler(false)
+
+	route := &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "drifted", Namespace: "default",
+			Annotations: map[string]string{annotations.Enabled: "true"},
+		},
+		Spec: gatewayv1.HTTPRouteSpec{Hostnames: []gatewayv1.Hostname{"healthy.example.com", "drifted.example.com"}},
+	}
+	if err := k8sClient.Create(ctx, route); err != nil {
+		t.Fatalf("create HTTPRoute: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: route.Name, Namespace: route.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, route)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("first Reconcile: %v", err)
+	}
+	first := &gatewayv1.HTTPRoute{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, first); err != nil {
+		t.Fatalf("get after first reconcile: %v", err)
+	}
+	firstIDs, err := annotations.ParseMonitorIDs(first.Annotations)
+	if err != nil {
+		t.Fatalf("ParseMonitorIDs: %v", err)
+	}
+	if len(firstIDs) != 2 {
+		t.Fatalf("monitor-ids = %v, want 2 entries", firstIDs)
+	}
+
+	drivenID, err := strconv.ParseInt(firstIDs["drifted.example.com"], 10, 64)
+	if err != nil {
+		t.Fatalf("parse drifted monitor id: %v", err)
+	}
+	if err := fake.Delete(ctx, drivenID); err != nil {
+		t.Fatalf("simulate out-of-band delete: %v", err)
+	}
+	fake.DeleteCalls = 0
+	fake.UpsertCalls = 0
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("second Reconcile (should recreate the drifted host only): %v", err)
+	}
+
+	if fake.UpsertCalls != 1 {
+		t.Errorf("Kuma Upsert called %d times, want exactly 1 (only the drifted host) — the healthy host must not be re-edited", fake.UpsertCalls)
+	}
+	if len(fake.Monitors) != 2 {
+		t.Errorf("expected 2 monitors in Kuma after recreation, got %d", len(fake.Monitors))
+	}
+
+	second := &gatewayv1.HTTPRoute{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, second); err != nil {
+		t.Fatalf("get after second reconcile: %v", err)
+	}
+	secondIDs, err := annotations.ParseMonitorIDs(second.Annotations)
+	if err != nil {
+		t.Fatalf("ParseMonitorIDs: %v", err)
+	}
+	if secondIDs["healthy.example.com"] != firstIDs["healthy.example.com"] {
+		t.Errorf("healthy.example.com id changed from %q to %q — it should have been left untouched",
+			firstIDs["healthy.example.com"], secondIDs["healthy.example.com"])
+	}
+	if secondIDs["drifted.example.com"] == "" || secondIDs["drifted.example.com"] == firstIDs["drifted.example.com"] {
+		t.Errorf("drifted.example.com id = %q, want a fresh id different from the deleted %q",
+			secondIDs["drifted.example.com"], firstIDs["drifted.example.com"])
 	}
 }
 

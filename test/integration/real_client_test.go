@@ -60,11 +60,27 @@ func TestRealClient_CreateUpdateDelete(t *testing.T) {
 		t.Fatalf("Upsert DNS create: %v", err)
 	}
 
+	existingIDs, err := client.ExistingIDs(ctx)
+	if err != nil {
+		t.Fatalf("ExistingIDs: %v", err)
+	}
+	if !existingIDs[id] || !existingIDs[dnsID] {
+		t.Errorf("ExistingIDs = %v, want both %d and %d present", existingIDs, id, dnsID)
+	}
+
 	if err := client.Delete(ctx, id); err != nil {
 		t.Errorf("Delete HTTP monitor: %v", err)
 	}
 	if err := client.Delete(ctx, dnsID); err != nil {
 		t.Errorf("Delete DNS monitor: %v", err)
+	}
+
+	existingIDs, err = client.ExistingIDs(ctx)
+	if err != nil {
+		t.Fatalf("ExistingIDs after delete: %v", err)
+	}
+	if existingIDs[id] || existingIDs[dnsID] {
+		t.Errorf("ExistingIDs = %v, want neither %d nor %d present after deletion", existingIDs, id, dnsID)
 	}
 }
 
