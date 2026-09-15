@@ -49,6 +49,15 @@ type MonitorSpec struct {
 	RetryInterval int64 // seconds; 0 = use Kuma default
 	MaxRetries    int64 // 0 = use Kuma default
 
+	// Description is shown alongside the monitor in the Kuma UI. "" = unset.
+	Description string
+	// ResendInterval is how many consecutive failed checks pass between
+	// repeated down notifications. 0 = disabled (Kuma default).
+	ResendInterval int64
+	// UpsideDown inverts up/down: the monitor is reported "up" when the
+	// underlying check fails and "down" when it succeeds.
+	UpsideDown bool
+
 	HTTP    *HTTPSpec
 	TCP     *TCPSpec
 	Ping    *PingSpec

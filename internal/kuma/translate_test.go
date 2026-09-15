@@ -147,3 +147,63 @@ func TestToBremlMonitor_MissingSubSpec(t *testing.T) {
 		t.Fatal("expected error when HTTP field is nil, got nil")
 	}
 }
+
+func TestFromBremlMonitor_RoundTripsThroughToBremlMonitor_CommonFields(t *testing.T) {
+	spec := MonitorSpec{
+		Type: TypeHTTP, Name: "web",
+		Description: "a friendly description", ResendInterval: 3, UpsideDown: true,
+		HTTP: &HTTPSpec{URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}},
+	}
+
+	mon, err := ToBremlMonitor(7, spec)
+	if err != nil {
+		t.Fatalf("ToBremlMonitor: %v", err)
+	}
+	data, err := json.Marshal(mon)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var base bremlmonitor.Base
+	if err := json.Unmarshal(data, &base); err != nil {
+		t.Fatalf("unmarshal into Base: %v", err)
+	}
+
+	got, err := FromBremlMonitor(base)
+	if err != nil {
+		t.Fatalf("FromBremlMonitor: %v", err)
+	}
+	if !Equivalent(spec, got) {
+		t.Errorf("FromBremlMonitor(round-tripped ToBremlMonitor(%+v)) = %+v, want an equivalent spec", spec, got)
+	}
+	if got.Description != "a friendly description" {
+		t.Errorf("Description = %q, want %q", got.Description, "a friendly description")
+	}
+	if got.ResendInterval != 3 {
+		t.Errorf("ResendInterval = %d, want 3", got.ResendInterval)
+	}
+	if !got.UpsideDown {
+		t.Error("UpsideDown = false, want true")
+	}
+}
+
+func TestEquivalent_DetectsDrift_CommonFields(t *testing.T) {
+	base := MonitorSpec{Type: TypeHTTP, Name: "web", HTTP: &HTTPSpec{URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}}}
+
+	changedDescription := base
+	changedDescription.Description = "changed"
+	if Equivalent(base, changedDescription) {
+		t.Error("Equivalent(base, changedDescription) = true, want false")
+	}
+
+	changedResendInterval := base
+	changedResendInterval.ResendInterval = 5
+	if Equivalent(base, changedResendInterval) {
+		t.Error("Equivalent(base, changedResendInterval) = true, want false")
+	}
+
+	changedUpsideDown := base
+	changedUpsideDown.UpsideDown = true
+	if Equivalent(base, changedUpsideDown) {
+		t.Error("Equivalent(base, changedUpsideDown) = true, want false")
+	}
+}
