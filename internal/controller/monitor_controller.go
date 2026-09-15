@@ -47,6 +47,8 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 					"monitorID", mon.Status.MonitorID)
 			} else if err := r.Kuma.Delete(ctx, id); err != nil {
 				return ctrl.Result{}, err
+			} else {
+				log.Info("deleted Kuma monitor", "monitorID", id)
 			}
 		}
 		if controllerutil.ContainsFinalizer(mon, annotations.Finalizer) {
@@ -97,6 +99,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	generationToSync := mon.Generation
+	creating := existingID == 0
 
 	newID, err := r.Kuma.Upsert(ctx, existingID, desiredSpec)
 	if err != nil {
@@ -104,6 +107,11 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			log.Error(uerr, "unable to record SyncFailed status on Monitor")
 		}
 		return ctrl.Result{}, err
+	}
+	if creating {
+		log.Info("created Kuma monitor", "monitorID", newID, "name", desiredSpec.Name, "type", desiredSpec.Type)
+	} else {
+		log.Info("updated Kuma monitor", "monitorID", newID, "name", desiredSpec.Name, "type", desiredSpec.Type)
 	}
 
 	if err := r.updateStatus(ctx, mon, strconv.FormatInt(newID, 10), generationToSync, metav1.ConditionTrue, "Synced", "monitor synced to Kuma"); err != nil {

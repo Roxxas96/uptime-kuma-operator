@@ -68,6 +68,11 @@ func syncMonitors(ctx context.Context, kc kuma.Client, desired []derive.DesiredM
 		if err != nil {
 			return nil, err
 		}
+		if id == 0 {
+			log.Info("created Kuma monitor", "host", dm.Host, "monitorID", newID)
+		} else {
+			log.Info("updated Kuma monitor", "host", dm.Host, "monitorID", newID)
+		}
 		newIDs[dm.Host] = strconv.FormatInt(newID, 10)
 	}
 
@@ -84,6 +89,7 @@ func syncMonitors(ctx context.Context, kc kuma.Client, desired []derive.DesiredM
 		if err := kc.Delete(ctx, id); err != nil {
 			return nil, err
 		}
+		log.Info("deleted Kuma monitor", "host", host, "monitorID", id)
 	}
 
 	return newIDs, nil
@@ -133,6 +139,7 @@ func specsMatch(desired []derive.DesiredMonitor, existingIDs map[string]string, 
 // Upsert(id=0, ...); a present-but-drifted one gets Upsert(id=existingID,
 // ...) to correct it in place.
 func reconcileDrift(ctx context.Context, kc kuma.Client, desired []derive.DesiredMonitor, existingIDs map[string]string, liveSpecs map[int64]kuma.MonitorSpec) (map[string]string, error) {
+	log := logf.FromContext(ctx)
 	byHost := make(map[string]derive.DesiredMonitor, len(desired))
 	for _, dm := range desired {
 		byHost[dm.Host] = dm
@@ -154,12 +161,18 @@ func reconcileDrift(ctx context.Context, kc kuma.Client, desired []derive.Desire
 			continue // still exists and matches, nothing to do
 		}
 		upsertID := id
-		if err != nil || !exists {
+		missing := err != nil || !exists
+		if missing {
 			upsertID = 0 // missing or corrupted id — create fresh
 		}
 		newID, err := kc.Upsert(ctx, upsertID, dm.Spec)
 		if err != nil {
 			return nil, err
+		}
+		if missing {
+			log.Info("recreated Kuma monitor deleted out-of-band", "host", host, "monitorID", newID)
+		} else {
+			log.Info("corrected Kuma monitor configuration drifted out-of-band", "host", host, "monitorID", newID)
 		}
 		newIDs[host] = strconv.FormatInt(newID, 10)
 	}
@@ -184,6 +197,7 @@ func deleteAllMonitors(ctx context.Context, kc kuma.Client, ann map[string]strin
 		if err := kc.Delete(ctx, id); err != nil {
 			return err
 		}
+		log.Info("deleted Kuma monitor", "host", host, "monitorID", id)
 	}
 	return nil
 }
