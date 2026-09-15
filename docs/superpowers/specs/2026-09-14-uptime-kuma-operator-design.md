@@ -48,7 +48,18 @@ its Socket.IO protocol (`addMonitor`, `editMonitor`, `deleteMonitor`,
 We depend on
 [`breml/go-uptime-kuma-client`](https://github.com/breml/go-uptime-kuma-client)
 (MIT, supports HTTP/TCP/Ping/DNS/gRPC/Real Browser/etc.), wrapped behind our
-own interface:
+own interface. **This requires the target Uptime Kuma instance to run 2.x** —
+the library's own README states 1.x is not supported (different login
+protocol, and 1.x's schema is missing columns the client unconditionally
+sends on every `addMonitor` call, e.g. `bearer_token`, so monitor creation
+fails outright against a 1.x server). The operator has no way to detect or
+warn about this at runtime; it's an operational precondition.
+
+```go
+package kuma
+
+type Client interface {
+    Upsert(ctx context.Context, id string, spec MonitorSpec) (newID string, err error)
 
 ```go
 package kuma

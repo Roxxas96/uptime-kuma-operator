@@ -1,6 +1,10 @@
 services:
   uptime-kuma:
-    image: louislam/uptime-kuma:1
+    # github.com/breml/go-uptime-kuma-client requires Uptime Kuma 2.x — 1.x uses a
+    # different login protocol (never announces loginRequired) and is missing
+    # columns (e.g. bearer_token) the client unconditionally sends on every
+    # addMonitor call, so every monitor create fails against a 1.x server.
+    image: louislam/uptime-kuma:2
     ports:
       - "3001:3001"
     volumes:
