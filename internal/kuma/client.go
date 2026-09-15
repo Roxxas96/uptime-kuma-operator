@@ -2,9 +2,19 @@ package kuma
 
 import (
 	"context"
+	"time"
 
 	bremlkuma "github.com/breml/go-uptime-kuma-client"
 )
+
+// connectTimeout bounds how long NewClient waits for the initial Socket.IO
+// connection (and, with autosetup, the first-run setup) to complete. Without
+// it, a stalled connection (bad URL, network partition, a proxy that mangles
+// long-polling/WebSocket upgrades) blocks bremlkuma.New forever — and since
+// NewClient runs before the manager creates any other goroutines, that hang
+// is indistinguishable from a real deadlock, which crashes the process via
+// Go's runtime deadlock detector instead of returning a retryable error.
+const connectTimeout = 30 * time.Second
 
 // Client manages Kuma monitors on behalf of the operator's controllers.
 // Upsert creates a monitor when id is 0, or updates the existing monitor
@@ -22,9 +32,18 @@ type realClient struct {
 }
 
 // NewClient logs into the Uptime Kuma instance at url and returns a Client
-// backed by the real Socket.IO connection.
+// backed by the real Socket.IO connection. The connection attempt is bounded
+// by connectTimeout regardless of ctx's own deadline (or lack of one), so a
+// stalled Kuma endpoint fails fast instead of hanging the caller forever.
 func NewClient(ctx context.Context, url, username, password string) (Client, error) {
-	c, err := bremlkuma.New(ctx, url, username, password)
+	return newClient(ctx, url, username, password, connectTimeout)
+}
+
+func newClient(ctx context.Context, url, username, password string, timeout time.Duration) (Client, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	c, err := bremlkuma.New(ctx, url, username, password, bremlkuma.WithConnectTimeout(timeout))
 	if err != nil {
 		return nil, err
 	}
