@@ -274,3 +274,44 @@ func TestEquivalent_DetectsDrift_HTTPFields(t *testing.T) {
 		t.Error("Equivalent(base, changedHeaders) = true, want false")
 	}
 }
+
+func TestFromBremlMonitor_RoundTripsThroughToBremlMonitor_TCPFields(t *testing.T) {
+	spec := MonitorSpec{
+		Type: TypeTCP, Name: "port-check",
+		TCP: &TCPSpec{
+			Host: "example.com", Port: 443,
+			TLSMode: "secure", ExpectedSSLAlert: "certificate_required",
+			ExpiryNotification: true, DomainExpiryNotification: true,
+		},
+	}
+
+	mon, err := ToBremlMonitor(7, spec)
+	if err != nil {
+		t.Fatalf("ToBremlMonitor: %v", err)
+	}
+	data, err := json.Marshal(mon)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var base bremlmonitor.Base
+	if err := json.Unmarshal(data, &base); err != nil {
+		t.Fatalf("unmarshal into Base: %v", err)
+	}
+
+	got, err := FromBremlMonitor(base)
+	if err != nil {
+		t.Fatalf("FromBremlMonitor: %v", err)
+	}
+	if !Equivalent(spec, got) {
+		t.Errorf("FromBremlMonitor(round-tripped ToBremlMonitor(%+v)) = %+v, want an equivalent spec", spec, got)
+	}
+}
+
+func TestEquivalent_DetectsDrift_TCPFields(t *testing.T) {
+	base := MonitorSpec{Type: TypeTCP, Name: "port-check", TCP: &TCPSpec{Host: "example.com", Port: 443, TLSMode: "secure"}}
+	changedTLSMode := base
+	changedTLSMode.TCP = &TCPSpec{Host: "example.com", Port: 443, TLSMode: "starttls"}
+	if Equivalent(base, changedTLSMode) {
+		t.Error("Equivalent(base, changedTLSMode) = true, want false")
+	}
+}

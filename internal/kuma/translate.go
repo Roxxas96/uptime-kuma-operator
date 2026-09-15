@@ -92,13 +92,19 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 		if spec.TCP == nil {
 			return nil, fmt.Errorf("kuma: monitor type %s requires the TCP field to be set", TypeTCP)
 		}
-		return &bremlmonitor.TCPPort{
-			Base: base,
-			TCPPortDetails: bremlmonitor.TCPPortDetails{
-				Hostname: spec.TCP.Host,
-				Port:     spec.TCP.Port,
-			},
-		}, nil
+		details := bremlmonitor.TCPPortDetails{
+			Hostname:                 spec.TCP.Host,
+			Port:                     spec.TCP.Port,
+			ExpiryNotification:       spec.TCP.ExpiryNotification,
+			DomainExpiryNotification: spec.TCP.DomainExpiryNotification,
+		}
+		if spec.TCP.TLSMode != "" {
+			details.SMTPSecurity = &spec.TCP.TLSMode
+		}
+		if spec.TCP.ExpectedSSLAlert != "" {
+			details.ExpectedTLSAlert = &spec.TCP.ExpectedSSLAlert
+		}
+		return &bremlmonitor.TCPPort{Base: base, TCPPortDetails: details}, nil
 
 	case TypePing:
 		if spec.Ping == nil {
@@ -181,7 +187,17 @@ func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 		if err := base.As(&d); err != nil {
 			return MonitorSpec{}, fmt.Errorf("kuma: decode TCP monitor %d: %w", base.GetID(), err)
 		}
-		spec.TCP = &TCPSpec{Host: d.Hostname, Port: d.Port}
+		tcp := &TCPSpec{
+			Host: d.Hostname, Port: d.Port,
+			ExpiryNotification: d.ExpiryNotification, DomainExpiryNotification: d.DomainExpiryNotification,
+		}
+		if d.SMTPSecurity != nil {
+			tcp.TLSMode = *d.SMTPSecurity
+		}
+		if d.ExpectedTLSAlert != nil {
+			tcp.ExpectedSSLAlert = *d.ExpectedTLSAlert
+		}
+		spec.TCP = tcp
 	case "ping":
 		spec.Type = TypePing
 		var d bremlmonitor.Ping

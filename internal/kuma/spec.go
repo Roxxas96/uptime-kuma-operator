@@ -38,6 +38,18 @@ type HTTPSpec struct {
 type TCPSpec struct {
 	Host string
 	Port int
+
+	// TLSMode selects the TLS handshake mode: "" (plain TCP), "nostarttls",
+	// "secure", or "starttls".
+	TLSMode string
+	// ExpectedSSLAlert is the TLS alert name expected during the handshake
+	// (e.g. for mTLS verification).
+	ExpectedSSLAlert string
+	// ExpiryNotification enables TLS certificate expiry notifications. Only
+	// honoured by Kuma when TLSMode is "secure" or "starttls".
+	ExpiryNotification bool
+	// DomainExpiryNotification enables domain expiry notifications.
+	DomainExpiryNotification bool
 }
 
 type PingSpec struct {
