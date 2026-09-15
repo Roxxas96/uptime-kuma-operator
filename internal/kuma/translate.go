@@ -53,12 +53,17 @@ func orDefault(v, def int64) int64 {
 func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 	spec = normalizeSpec(spec)
 	base := bremlmonitor.Base{
-		ID:            id,
-		Name:          spec.Name,
-		Interval:      spec.Interval,
-		RetryInterval: spec.RetryInterval,
-		MaxRetries:    spec.MaxRetries,
-		IsActive:      true,
+		ID:             id,
+		Name:           spec.Name,
+		Interval:       spec.Interval,
+		RetryInterval:  spec.RetryInterval,
+		MaxRetries:     spec.MaxRetries,
+		ResendInterval: spec.ResendInterval,
+		UpsideDown:     spec.UpsideDown,
+		IsActive:       true,
+	}
+	if spec.Description != "" {
+		base.Description = &spec.Description
 	}
 
 	switch spec.Type {
@@ -138,10 +143,15 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 // in Kuma and are never compared or overwritten by the operator.
 func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 	spec := MonitorSpec{
-		Name:          base.Name,
-		Interval:      base.Interval,
-		RetryInterval: base.RetryInterval,
-		MaxRetries:    base.MaxRetries,
+		Name:           base.Name,
+		Interval:       base.Interval,
+		RetryInterval:  base.RetryInterval,
+		MaxRetries:     base.MaxRetries,
+		ResendInterval: base.ResendInterval,
+		UpsideDown:     base.UpsideDown,
+	}
+	if base.Description != nil {
+		spec.Description = *base.Description
 	}
 
 	switch base.Type() {
@@ -199,7 +209,9 @@ func Equivalent(desired, live MonitorSpec) bool {
 	d := normalizeSpec(desired)
 	live = normalizeSpec(live)
 	if d.Type != live.Type || d.Name != live.Name || d.Interval != live.Interval ||
-		d.RetryInterval != live.RetryInterval || d.MaxRetries != live.MaxRetries {
+		d.RetryInterval != live.RetryInterval || d.MaxRetries != live.MaxRetries ||
+		d.Description != live.Description || d.ResendInterval != live.ResendInterval ||
+		d.UpsideDown != live.UpsideDown {
 		return false
 	}
 	switch d.Type {
