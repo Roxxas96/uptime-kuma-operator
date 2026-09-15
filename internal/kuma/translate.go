@@ -110,12 +110,15 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 		if spec.Ping == nil {
 			return nil, fmt.Errorf("kuma: monitor type %s requires the Ping field to be set", TypePing)
 		}
-		return &bremlmonitor.Ping{
-			Base: base,
-			PingDetails: bremlmonitor.PingDetails{
-				Hostname: spec.Ping.Host,
-			},
-		}, nil
+		details := bremlmonitor.PingDetails{
+			Hostname:                 spec.Ping.Host,
+			PacketSize:               spec.Ping.PacketSize,
+			DomainExpiryNotification: spec.Ping.DomainExpiryNotification,
+		}
+		if spec.Ping.Timeout != 0 {
+			details.Timeout = &spec.Ping.Timeout
+		}
+		return &bremlmonitor.Ping{Base: base, PingDetails: details}, nil
 
 	case TypeDNS:
 		if spec.DNS == nil {
@@ -124,10 +127,11 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 		return &bremlmonitor.DNS{
 			Base: base,
 			DNSDetails: bremlmonitor.DNSDetails{
-				Hostname:       spec.DNS.Host,
-				ResolverServer: spec.DNS.ResolverServer,
-				ResolveType:    bremlmonitor.DNSResolveType(spec.DNS.ResolveType),
-				Port:           spec.DNS.Port,
+				Hostname:                 spec.DNS.Host,
+				ResolverServer:           spec.DNS.ResolverServer,
+				ResolveType:              bremlmonitor.DNSResolveType(spec.DNS.ResolveType),
+				Port:                     spec.DNS.Port,
+				DomainExpiryNotification: spec.DNS.DomainExpiryNotification,
 			},
 		}, nil
 
@@ -204,14 +208,23 @@ func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 		if err := base.As(&d); err != nil {
 			return MonitorSpec{}, fmt.Errorf("kuma: decode Ping monitor %d: %w", base.GetID(), err)
 		}
-		spec.Ping = &PingSpec{Host: d.Hostname}
+		ping := &PingSpec{
+			Host: d.Hostname, PacketSize: d.PacketSize, DomainExpiryNotification: d.DomainExpiryNotification,
+		}
+		if d.Timeout != nil {
+			ping.Timeout = *d.Timeout
+		}
+		spec.Ping = ping
 	case "dns":
 		spec.Type = TypeDNS
 		var d bremlmonitor.DNS
 		if err := base.As(&d); err != nil {
 			return MonitorSpec{}, fmt.Errorf("kuma: decode DNS monitor %d: %w", base.GetID(), err)
 		}
-		spec.DNS = &DNSSpec{Host: d.Hostname, ResolverServer: d.ResolverServer, ResolveType: string(d.ResolveType), Port: d.Port}
+		spec.DNS = &DNSSpec{
+			Host: d.Hostname, ResolverServer: d.ResolverServer, ResolveType: string(d.ResolveType), Port: d.Port,
+			DomainExpiryNotification: d.DomainExpiryNotification,
+		}
 	case "gamedig":
 		spec.Type = TypeGamedig
 		var d bremlmonitor.GameDig
