@@ -85,6 +85,7 @@ KUMA_USERNAME / KUMA_PASSWORD   (from Secret)
 WATCH_NAMESPACES=prod,staging    # empty/unset = operator's own namespace only
 WATCH_ALL=false                  # true = watch every namespace (namespace scope only)
 OPT_IN_BY_DEFAULT=false          # true = sync everything not explicitly opted out
+DRIFT_CHECK_INTERVAL=5m          # Go duration string; how often to re-check Kuma for out-of-band deletions
 ```
 
 `WATCH_ALL` and `OPT_IN_BY_DEFAULT` are deliberately independent: `WATCH_ALL`
@@ -94,8 +95,9 @@ on the annotation contract below — watching every namespace does not exempt
 a resource from needing `uptime-kuma.io/enabled=true`. Only
 `OPT_IN_BY_DEFAULT` controls that.
 
-Changing `WATCH_NAMESPACES`, `WATCH_ALL`, or `OPT_IN_BY_DEFAULT` requires a
-pod restart (no hot-reload watcher) — acceptable since this changes rarely.
+Changing `WATCH_NAMESPACES`, `WATCH_ALL`, `OPT_IN_BY_DEFAULT`, or
+`DRIFT_CHECK_INTERVAL` requires a pod restart (no hot-reload watcher) —
+acceptable since these change rarely.
 
 Startup fails fast (non-zero exit, no retry) if Kuma credentials are
 invalid — there's no point running controllers that can never sync.
@@ -392,3 +394,12 @@ reconcilers disabled — the same shape used here.
   completely untouched, so this can't reintroduce the redundant-editMonitor
   bug it's built next to. Verified `ExistingIDs` against a real Kuma
   instance (not just `FakeClient`) before relying on it.
+- **Follow-up: made `driftCheckInterval` configurable.** It was a hardcoded
+  5-minute constant. A user reported the operator only recovered a
+  Kuma-deleted monitor after a pod restart; investigation traced this to
+  their deployed image predating the drift-check feature above (`main` had
+  not yet merged it), not a bug in the requeue mechanism itself — but since
+  5 minutes may not suit every deployment, `driftCheckInterval` became a
+  `DriftCheckInterval time.Duration` field on each reconciler, sourced from
+  `config.Config.DriftCheckInterval` (env var `DRIFT_CHECK_INTERVAL`, a Go
+  duration string, default `config.DefaultDriftCheckInterval` = 5m).

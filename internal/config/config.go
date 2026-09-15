@@ -3,7 +3,11 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 )
+
+// DefaultDriftCheckInterval is used when DRIFT_CHECK_INTERVAL is unset.
+const DefaultDriftCheckInterval = 5 * time.Minute
 
 type Config struct {
 	KumaURL         string
@@ -20,17 +24,34 @@ type Config struct {
 	// default), a resource is synced only when explicitly annotated
 	// uptime-kuma.io/enabled=true — regardless of WatchAll.
 	OptInByDefault bool
+	// DriftCheckInterval is how often a reconciler that found nothing to
+	// sync re-checks that Kuma still has the monitors it's supposed to,
+	// recreating any that were deleted out-of-band (e.g. manually in the
+	// Kuma UI). Defaults to DefaultDriftCheckInterval.
+	DriftCheckInterval time.Duration
 }
 
 // Load builds a Config from environment variables, read via getenv so tests
 // don't need to mutate real process environment.
 func Load(getenv func(string) string) (Config, error) {
 	cfg := Config{
-		KumaURL:        getenv("KUMA_URL"),
-		KumaUsername:   getenv("KUMA_USERNAME"),
-		KumaPassword:   getenv("KUMA_PASSWORD"),
-		WatchAll:       getenv("WATCH_ALL") == "true",
-		OptInByDefault: getenv("OPT_IN_BY_DEFAULT") == "true",
+		KumaURL:            getenv("KUMA_URL"),
+		KumaUsername:       getenv("KUMA_USERNAME"),
+		KumaPassword:       getenv("KUMA_PASSWORD"),
+		WatchAll:           getenv("WATCH_ALL") == "true",
+		OptInByDefault:     getenv("OPT_IN_BY_DEFAULT") == "true",
+		DriftCheckInterval: DefaultDriftCheckInterval,
+	}
+
+	if raw := getenv("DRIFT_CHECK_INTERVAL"); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("config: DRIFT_CHECK_INTERVAL is not a valid duration: %w", err)
+		}
+		if d <= 0 {
+			return Config{}, fmt.Errorf("config: DRIFT_CHECK_INTERVAL must be positive, got %q", raw)
+		}
+		cfg.DriftCheckInterval = d
 	}
 
 	if cfg.KumaURL == "" {

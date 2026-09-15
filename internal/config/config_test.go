@@ -3,6 +3,7 @@ package config
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 func envMap(m map[string]string) func(string) string {
@@ -19,7 +20,10 @@ func TestLoad_MinimalValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	want := Config{KumaURL: "https://kuma.example.com", KumaUsername: "admin", KumaPassword: "secret", WatchNamespaces: []string{"default"}}
+	want := Config{
+		KumaURL: "https://kuma.example.com", KumaUsername: "admin", KumaPassword: "secret",
+		WatchNamespaces: []string{"default"}, DriftCheckInterval: DefaultDriftCheckInterval,
+	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("Load = %+v, want %+v", cfg, want)
 	}
@@ -122,6 +126,63 @@ func TestLoad_OptInByDefaultTrue(t *testing.T) {
 	}
 	if !cfg.OptInByDefault {
 		t.Error("OptInByDefault = false, want true")
+	}
+}
+
+func TestLoad_DriftCheckIntervalDefaultsWhenUnset(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":      "https://kuma.example.com",
+		"KUMA_USERNAME": "admin",
+		"KUMA_PASSWORD": "secret",
+		"POD_NAMESPACE": "default",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.DriftCheckInterval != DefaultDriftCheckInterval {
+		t.Errorf("DriftCheckInterval = %v, want default %v", cfg.DriftCheckInterval, DefaultDriftCheckInterval)
+	}
+}
+
+func TestLoad_DriftCheckIntervalParsesDuration(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":             "https://kuma.example.com",
+		"KUMA_USERNAME":        "admin",
+		"KUMA_PASSWORD":        "secret",
+		"POD_NAMESPACE":        "default",
+		"DRIFT_CHECK_INTERVAL": "30s",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.DriftCheckInterval != 30*time.Second {
+		t.Errorf("DriftCheckInterval = %v, want 30s", cfg.DriftCheckInterval)
+	}
+}
+
+func TestLoad_DriftCheckIntervalRejectsInvalidDuration(t *testing.T) {
+	_, err := Load(envMap(map[string]string{
+		"KUMA_URL":             "https://kuma.example.com",
+		"KUMA_USERNAME":        "admin",
+		"KUMA_PASSWORD":        "secret",
+		"POD_NAMESPACE":        "default",
+		"DRIFT_CHECK_INTERVAL": "not-a-duration",
+	}))
+	if err == nil {
+		t.Fatal("expected error for invalid DRIFT_CHECK_INTERVAL, got nil")
+	}
+}
+
+func TestLoad_DriftCheckIntervalRejectsNonPositive(t *testing.T) {
+	_, err := Load(envMap(map[string]string{
+		"KUMA_URL":             "https://kuma.example.com",
+		"KUMA_USERNAME":        "admin",
+		"KUMA_PASSWORD":        "secret",
+		"POD_NAMESPACE":        "default",
+		"DRIFT_CHECK_INTERVAL": "0s",
+	}))
+	if err == nil {
+		t.Fatal("expected error for non-positive DRIFT_CHECK_INTERVAL, got nil")
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -19,13 +18,6 @@ import (
 	"uptime-kuma-operator/internal/derive"
 	"uptime-kuma-operator/internal/kuma"
 )
-
-// driftCheckInterval is how often a reconciler that found nothing to sync
-// (desiredHash/ObservedGeneration unchanged) re-checks that Kuma still has
-// what it's supposed to. Without this, a monitor deleted out-of-band (e.g.
-// manually in the Kuma UI) would never be noticed: nothing on the
-// Kubernetes side changes, so nothing re-triggers a reconcile.
-const driftCheckInterval = 5 * time.Minute
 
 // desiredHash returns a stable fingerprint of desired (the derived monitor
 // set for an Ingress/HTTPRoute — a function of both .spec and the override

@@ -36,6 +36,8 @@ spec:
               value: {{ join "," .Values.watchNamespaces | quote }}
             - name: OPT_IN_BY_DEFAULT
               value: {{ .Values.optInByDefault | quote }}
+            - name: DRIFT_CHECK_INTERVAL
+              value: {{ .Values.driftCheckInterval | quote }}
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:

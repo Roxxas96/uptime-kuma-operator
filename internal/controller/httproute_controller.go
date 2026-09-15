@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/record"
@@ -22,6 +23,10 @@ type HTTPRouteReconciler struct {
 	// of which namespaces the manager watches (config.Config.WatchAll).
 	OptInByDefault bool
 	Recorder       record.EventRecorder
+	// DriftCheckInterval is how often a reconcile that found nothing to sync
+	// re-checks that Kuma still has what it's supposed to. See sync.go's
+	// allExist/recreateMissing doc comments for why this exists.
+	DriftCheckInterval time.Duration
 }
 
 func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -91,14 +96,14 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, err
 		}
 		if allExist(existingIDs, liveIDs) {
-			return ctrl.Result{RequeueAfter: driftCheckInterval}, nil
+			return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 		}
 		newIDs, err := recreateMissing(ctx, r.Kuma, desired, existingIDs, liveIDs)
 		if err != nil {
 			recordSyncFailure(r.Recorder, route, err)
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: driftCheckInterval}, persistMonitorIDs(ctx, r.Client, route, newIDs, true, hash)
+		return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, persistMonitorIDs(ctx, r.Client, route, newIDs, true, hash)
 	}
 
 	newIDs, err := syncMonitors(ctx, r.Kuma, desired, existingIDs)
@@ -107,7 +112,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{RequeueAfter: driftCheckInterval}, persistMonitorIDs(ctx, r.Client, route, newIDs, true, hash)
+	return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, persistMonitorIDs(ctx, r.Client, route, newIDs, true, hash)
 }
 
 func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {

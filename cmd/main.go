@@ -67,14 +67,14 @@ func main() {
 
 	if err := (&controller.IngressReconciler{
 		Client: mgr.GetClient(), Kuma: kumaClient, OptInByDefault: cfg.OptInByDefault,
-		Recorder: recorder,
+		Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval,
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create Ingress controller")
 		os.Exit(1)
 	}
 
 	if err := (&controller.MonitorReconciler{
-		Client: mgr.GetClient(), Kuma: kumaClient,
+		Client: mgr.GetClient(), Kuma: kumaClient, DriftCheckInterval: cfg.DriftCheckInterval,
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create Monitor controller")
 		os.Exit(1)
@@ -84,7 +84,7 @@ func main() {
 		utilruntime.Must(gatewayv1.Install(scheme))
 		if err := (&controller.HTTPRouteReconciler{
 			Client: mgr.GetClient(), Kuma: kumaClient, OptInByDefault: cfg.OptInByDefault,
-			Recorder: recorder,
+			Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create HTTPRoute controller")
 			os.Exit(1)
@@ -93,7 +93,8 @@ func main() {
 		log.Info("HTTPRoute CRD not found in cluster, skipping HTTPRoute controller")
 	}
 
-	log.Info("starting manager", "watchNamespaces", cfg.WatchNamespaces, "watchAll", cfg.WatchAll, "optInByDefault", cfg.OptInByDefault)
+	log.Info("starting manager", "watchNamespaces", cfg.WatchNamespaces, "watchAll", cfg.WatchAll,
+		"optInByDefault", cfg.OptInByDefault, "driftCheckInterval", cfg.DriftCheckInterval)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Error(err, "manager exited with error")
 		os.Exit(1)

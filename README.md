@@ -44,6 +44,12 @@ the full design.
    `uptime-kuma.io/enabled=false`. `watchAll` and `optInByDefault` are
    independent — set either, both, or neither.
 
+   If a monitor is deleted directly in Kuma (e.g. via its UI) while its
+   source Ingress/HTTPRoute/Monitor still exists, the operator recreates it
+   on its next reconcile of that resource — at most `driftCheckInterval`
+   (default `5m`) later, even with no other trigger. Set
+   `--set driftCheckInterval=30s` for faster recovery.
+
 4. Or declare a monitor Kuma can't derive from routing (DNS, Gamedig, TCP,
    Ping) with a `Monitor` CR — see
    `config/samples/uptime-kuma_v1alpha1_monitor.yaml`:
