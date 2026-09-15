@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	bremlkuma "github.com/breml/go-uptime-kuma-client"
+
 	"uptime-kuma-operator/internal/kuma"
 )
 
@@ -14,10 +16,12 @@ import (
 // a real Uptime Kuma instance. Run with:
 //
 //	docker compose -f test/integration/docker-compose.yaml up -d
-//	# then, after completing Kuma's one-time setup wizard at http://localhost:3001
-//	# with username/password matching the env vars below:
 //	KUMA_URL=http://localhost:3001 KUMA_USERNAME=admin KUMA_PASSWORD=password \
 //	  go test -tags=integration ./test/integration/... -v
+//
+// No manual setup wizard needed: bootstrapKuma below completes it via
+// breml's WithAutosetup, which is safe to call whether the instance is
+// fresh or already configured with these same credentials.
 func TestRealClient_CreateUpdateDelete(t *testing.T) {
 	url := envOrSkip(t, "KUMA_URL")
 	user := envOrSkip(t, "KUMA_USERNAME")
@@ -25,6 +29,8 @@ func TestRealClient_CreateUpdateDelete(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	bootstrapKuma(t, ctx, url, user, pass)
 
 	client, err := kuma.NewClient(ctx, url, user, pass)
 	if err != nil {
@@ -60,6 +66,20 @@ func TestRealClient_CreateUpdateDelete(t *testing.T) {
 	if err := client.Delete(ctx, dnsID); err != nil {
 		t.Errorf("Delete DNS monitor: %v", err)
 	}
+}
+
+// bootstrapKuma completes Kuma's first-run database and admin-account setup
+// via breml's own client (not internal/kuma.Client, which deliberately has
+// no autosetup — a running operator should never auto-provision credentials
+// against an arbitrary configured URL). Safe to call against an
+// already-configured instance: it just logs in normally in that case.
+func bootstrapKuma(t *testing.T, ctx context.Context, url, user, pass string) {
+	t.Helper()
+	c, err := bremlkuma.New(ctx, url, user, pass, bremlkuma.WithAutosetup())
+	if err != nil {
+		t.Fatalf("bootstrapKuma: %v", err)
+	}
+	defer c.Disconnect() //nolint:errcheck // best-effort cleanup of a throwaway bootstrap connection
 }
 
 func envOrSkip(t *testing.T, key string) string {

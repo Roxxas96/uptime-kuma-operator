@@ -50,8 +50,12 @@ the full design.
 
 - `make test` runs unit tests and the `envtest`-backed controller suite.
 - `go test -tags=integration ./test/integration/...` runs the real-Kuma
-  integration test; requires `docker compose -f test/integration/docker-compose.yaml up -d`
-  and completing Kuma's one-time setup wizard first. Not part of `make test`.
+  integration test against Uptime Kuma **2.x** (`github.com/breml/go-uptime-kuma-client`
+  requires 2.x; 1.x is not supported and uses an incompatible schema/login
+  protocol). Requires `docker compose -f test/integration/docker-compose.yaml up -d`,
+  then `KUMA_URL=http://localhost:3001 KUMA_USERNAME=admin KUMA_PASSWORD=<password> go test -tags=integration ./test/integration/... -v`
+  — no manual setup wizard needed, the test bootstraps the instance itself.
+  Not part of `make test`.
 - `./charts/uptime-kuma-operator/templates/tests/rbac_test.sh` checks the
   chart renders per-namespace `Role`s or a `ClusterRole` correctly depending
   on `watchAll`, including at chart defaults.
