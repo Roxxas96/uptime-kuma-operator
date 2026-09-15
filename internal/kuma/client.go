@@ -33,16 +33,22 @@ type realClient struct {
 
 // NewClient logs into the Uptime Kuma instance at url and returns a Client
 // backed by the real Socket.IO connection. The connection attempt is bounded
-// by connectTimeout regardless of ctx's own deadline (or lack of one), so a
-// stalled Kuma endpoint fails fast instead of hanging the caller forever.
+// by connectTimeout, so a stalled Kuma endpoint fails fast instead of
+// hanging the caller forever.
+//
+// ctx is not wrapped with its own timeout here: bremlkuma.New retains ctx
+// for the connection's entire lifetime (its internal goroutines treat
+// ctx.Done() as a shutdown signal, not just a connect-attempt deadline), so
+// wrapping it in a context.WithTimeout that gets canceled once this
+// function returns would silently kill every subsequent call on a
+// successfully-connected client. bremlkuma.WithConnectTimeout bounds the
+// connection attempt on its own, independent of ctx's cancellation state,
+// which is what actually fixes the original hang.
 func NewClient(ctx context.Context, url, username, password string) (Client, error) {
 	return newClient(ctx, url, username, password, connectTimeout)
 }
 
 func newClient(ctx context.Context, url, username, password string, timeout time.Duration) (Client, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
 	c, err := bremlkuma.New(ctx, url, username, password, bremlkuma.WithConnectTimeout(timeout))
 	if err != nil {
 		return nil, err
