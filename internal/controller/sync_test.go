@@ -219,39 +219,50 @@ func TestPersistMonitorIDs_WritesWhenHashChanges(t *testing.T) {
 	}
 }
 
-func TestAllExist(t *testing.T) {
+func TestSpecsMatch(t *testing.T) {
+	httpSpec := kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "a", HTTP: &kuma.HTTPSpec{URL: "https://a.example.com/"}}
+	otherSpec := kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "a", HTTP: &kuma.HTTPSpec{URL: "https://changed.example.com/"}}
+	desired := []derive.DesiredMonitor{
+		{Host: "a.example.com", Spec: httpSpec},
+		{Host: "b.example.com", Spec: httpSpec},
+	}
+
 	cases := []struct {
 		name        string
 		existingIDs map[string]string
-		liveIDs     map[int64]bool
+		liveSpecs   map[int64]kuma.MonitorSpec
 		want        bool
 	}{
-		{"empty existingIDs", nil, map[int64]bool{}, true},
-		{"all present", map[string]string{"a.example.com": "1", "b.example.com": "2"}, map[int64]bool{1: true, 2: true}, true},
-		{"one missing", map[string]string{"a.example.com": "1", "b.example.com": "2"}, map[int64]bool{1: true}, false},
-		{"unparseable id counts as missing", map[string]string{"a.example.com": "not-a-number"}, map[int64]bool{}, false},
+		{"empty existingIDs", nil, map[int64]kuma.MonitorSpec{}, true},
+		{"all present and matching", map[string]string{"a.example.com": "1", "b.example.com": "2"},
+			map[int64]kuma.MonitorSpec{1: httpSpec, 2: httpSpec}, true},
+		{"one missing", map[string]string{"a.example.com": "1", "b.example.com": "2"},
+			map[int64]kuma.MonitorSpec{1: httpSpec}, false},
+		{"one present but config drifted", map[string]string{"a.example.com": "1", "b.example.com": "2"},
+			map[int64]kuma.MonitorSpec{1: httpSpec, 2: otherSpec}, false},
+		{"unparseable id counts as drift", map[string]string{"a.example.com": "not-a-number"}, map[int64]kuma.MonitorSpec{}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := allExist(c.existingIDs, c.liveIDs); got != c.want {
-				t.Errorf("allExist(%v, %v) = %v, want %v", c.existingIDs, c.liveIDs, got, c.want)
+			if got := specsMatch(desired, c.existingIDs, c.liveSpecs); got != c.want {
+				t.Errorf("specsMatch(%v, %v) = %v, want %v", c.existingIDs, c.liveSpecs, got, c.want)
 			}
 		})
 	}
 }
 
-func TestRecreateMissing_OnlyTouchesMissingHosts(t *testing.T) {
+func TestReconcileDrift_OnlyTouchesDriftedHosts(t *testing.T) {
 	ctx := context.Background()
 	fake := kuma.NewFakeClient()
 
 	// Pre-populate Kuma directly so IDs 1 and 2 both "exist" initially —
-	// 1 stays, 2 is what we'll treat as deleted out-of-band.
+	// 1 stays untouched, 2 is what we'll treat as deleted out-of-band.
 	id1, _ := fake.Upsert(ctx, 0, kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "a", HTTP: &kuma.HTTPSpec{URL: "https://a.example.com/"}})
 	id2, _ := fake.Upsert(ctx, 0, kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "b", HTTP: &kuma.HTTPSpec{URL: "https://b.example.com/"}})
 	if err := fake.Delete(ctx, id2); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	fake.UpsertCalls = 0 // reset so we can assert on recreateMissing's own calls only
+	fake.UpsertCalls = 0 // reset so we can assert on reconcileDrift's own calls only
 
 	existingIDs := map[string]string{
 		"a.example.com": strconv.FormatInt(id1, 10),
@@ -261,18 +272,18 @@ func TestRecreateMissing_OnlyTouchesMissingHosts(t *testing.T) {
 		{Host: "a.example.com", Spec: kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "a", HTTP: &kuma.HTTPSpec{URL: "https://a.example.com/"}}},
 		{Host: "b.example.com", Spec: kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "b", HTTP: &kuma.HTTPSpec{URL: "https://b.example.com/"}}},
 	}
-	liveIDs, err := fake.ExistingIDs(ctx)
+	liveSpecs, err := fake.ExistingSpecs(ctx)
 	if err != nil {
-		t.Fatalf("ExistingIDs: %v", err)
+		t.Fatalf("ExistingSpecs: %v", err)
 	}
 
-	newIDs, err := recreateMissing(ctx, fake, desired, existingIDs, liveIDs)
+	newIDs, err := reconcileDrift(ctx, fake, desired, existingIDs, liveSpecs)
 	if err != nil {
-		t.Fatalf("recreateMissing: %v", err)
+		t.Fatalf("reconcileDrift: %v", err)
 	}
 
 	if fake.UpsertCalls != 1 {
-		t.Errorf("Kuma Upsert called %d times, want exactly 1 (only the missing host) — recreateMissing must not touch hosts that still exist", fake.UpsertCalls)
+		t.Errorf("Kuma Upsert called %d times, want exactly 1 (only the missing host) — reconcileDrift must not touch hosts that still match", fake.UpsertCalls)
 	}
 	if newIDs["a.example.com"] != strconv.FormatInt(id1, 10) {
 		t.Errorf("a.example.com id changed to %q, want unchanged %d", newIDs["a.example.com"], id1)
@@ -282,5 +293,39 @@ func TestRecreateMissing_OnlyTouchesMissingHosts(t *testing.T) {
 	}
 	if len(fake.Monitors) != 2 {
 		t.Errorf("expected 2 monitors in Kuma after recreation, got %d", len(fake.Monitors))
+	}
+}
+
+func TestReconcileDrift_CorrectsConfigDriftInPlace(t *testing.T) {
+	ctx := context.Background()
+	fake := kuma.NewFakeClient()
+
+	id, _ := fake.Upsert(ctx, 0, kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "a", HTTP: &kuma.HTTPSpec{URL: "https://a.example.com/"}})
+	// Simulate an out-of-band edit directly in Kuma, bypassing our Upsert.
+	fake.Monitors[id] = kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "a", HTTP: &kuma.HTTPSpec{URL: "https://changed-by-someone-else.example.com/"}}
+	fake.UpsertCalls = 0
+
+	existingIDs := map[string]string{"a.example.com": strconv.FormatInt(id, 10)}
+	desired := []derive.DesiredMonitor{
+		{Host: "a.example.com", Spec: kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "a", HTTP: &kuma.HTTPSpec{URL: "https://a.example.com/"}}},
+	}
+	liveSpecs, err := fake.ExistingSpecs(ctx)
+	if err != nil {
+		t.Fatalf("ExistingSpecs: %v", err)
+	}
+
+	newIDs, err := reconcileDrift(ctx, fake, desired, existingIDs, liveSpecs)
+	if err != nil {
+		t.Fatalf("reconcileDrift: %v", err)
+	}
+
+	if fake.UpsertCalls != 1 {
+		t.Errorf("Kuma Upsert called %d times, want exactly 1 (correcting the drifted config)", fake.UpsertCalls)
+	}
+	if newIDs["a.example.com"] != strconv.FormatInt(id, 10) {
+		t.Errorf("a.example.com id = %q, want unchanged %d — a config correction must update in place, not recreate", newIDs["a.example.com"], id)
+	}
+	if got := fake.Monitors[id].HTTP.URL; got != "https://a.example.com/" {
+		t.Errorf("corrected URL = %q, want %q", got, "https://a.example.com/")
 	}
 }

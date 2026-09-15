@@ -14,9 +14,9 @@ type FakeClient struct {
 	nextID   int64
 	Monitors map[int64]MonitorSpec
 
-	UpsertErr      error
-	DeleteErr      error
-	ExistingIDsErr error
+	UpsertErr        error
+	DeleteErr        error
+	ExistingSpecsErr error
 
 	// UpsertCalls and DeleteCalls count invocations, including ones that
 	// returned an error — reconcilers should call Upsert only when the
@@ -57,17 +57,17 @@ func (f *FakeClient) Delete(_ context.Context, id int64) error {
 	return nil
 }
 
-func (f *FakeClient) ExistingIDs(_ context.Context) (map[int64]bool, error) {
+func (f *FakeClient) ExistingSpecs(_ context.Context) (map[int64]MonitorSpec, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.ExistingIDsErr != nil {
-		return nil, f.ExistingIDsErr
+	if f.ExistingSpecsErr != nil {
+		return nil, f.ExistingSpecsErr
 	}
-	ids := make(map[int64]bool, len(f.Monitors))
-	for id := range f.Monitors {
-		ids[id] = true
+	specs := make(map[int64]MonitorSpec, len(f.Monitors))
+	for id, spec := range f.Monitors {
+		specs[id] = spec
 	}
-	return ids, nil
+	return specs, nil
 }
 
 var _ Client = (*FakeClient)(nil)

@@ -61,11 +61,13 @@ package kuma
 type Client interface {
     Upsert(ctx context.Context, id int64, spec MonitorSpec) (newID int64, err error)
     Delete(ctx context.Context, id int64) error
-    // ExistingIDs supports drift detection (see "Recreate on Kuma-side
-    // deletion" in the decisions log) — a cheap, non-mutating list call
-    // reconcilers use to check whether a tracked monitor still exists,
-    // instead of an Upsert/editMonitor round-trip per candidate.
-    ExistingIDs(ctx context.Context) (map[int64]bool, error)
+    // ExistingSpecs supports drift detection (see "Recreate on Kuma-side
+    // deletion" and its config-drift follow-up in the decisions log) — a
+    // cheap, non-mutating list call reconcilers use to check both whether a
+    // tracked monitor still exists and whether its live configuration still
+    // matches what's desired, instead of an Upsert/editMonitor round-trip
+    // per candidate.
+    ExistingSpecs(ctx context.Context) (map[int64]MonitorSpec, error)
 }
 ```
 
@@ -152,17 +154,22 @@ Both controllers share this logic:
        configuration (annotation churn from other tooling, an informer
        resync, an error-triggered requeue) — would mean the monitor never
        completes more than one check cycle (a real, shipped bug — see the
-       decisions log). So instead: call `kuma.ExistingIDs` (one cheap,
-       non-mutating list call) and check every host's tracked ID is still
-       present.
-       - All present → nothing to do. Requeue after `driftCheckInterval`
-         (5 minutes) to check again later.
-       - Any missing (deleted out-of-band, e.g. manually in the Kuma UI) →
-         recreate only the missing host(s) (`kuma.Upsert(ctx, 0, spec)`),
-         leaving every host that's still present completely untouched — no
-         edit call for them, so the redundant-editMonitor bug can't recur
-         here either. Patch `monitor-ids` with the updated map (`synced-hash`
-         is unchanged, since the desired config itself didn't change).
+       decisions log). So instead: call `kuma.ExistingSpecs` (one cheap,
+       non-mutating list call) and check every host's tracked ID is both
+       still present *and* still configured (per `kuma.Equivalent`) the way
+       this host's derived spec desires.
+       - All present and matching → nothing to do. Requeue after
+         `driftCheckInterval` (configurable, default 5 minutes) to check
+         again later.
+       - Any missing (deleted out-of-band) or drifted (edited out-of-band,
+         e.g. manually in the Kuma UI) → correct only that host: a missing
+         one is recreated (`kuma.Upsert(ctx, 0, spec)`), a present-but-
+         drifted one is corrected in place (`kuma.Upsert(ctx, existingID,
+         spec)`). Every host that's still present *and* matching is left
+         completely untouched — no edit call for them, so the
+         redundant-editMonitor bug can't recur here either. Patch
+         `monitor-ids` with the updated map (`synced-hash` is unchanged,
+         since the desired config itself didn't change).
    - Ensure finalizer `uptime-kuma.io/finalizer` is present in either case.
    - Requeue after `driftCheckInterval` on every successful path above, so
      drift is caught even when nothing on the Kubernetes side ever changes
@@ -233,11 +240,14 @@ status:
 2. On delete (finalizer path): if `status.monitorID` is set, `kuma.Delete`
    it, then remove the finalizer.
 3. If `status.monitorID` is set and `status.observedGeneration ==
-   .metadata.generation`: call `kuma.ExistingIDs` and check the ID is still
-   present.
-   - Present → nothing to do; requeue after `driftCheckInterval`.
+   .metadata.generation`: call `kuma.ExistingSpecs` and check the ID is
+   still present *and* its live spec is `kuma.Equivalent` to the CR's spec.
+   - Present and matching → nothing to do; requeue after
+     `driftCheckInterval`.
    - Missing (deleted out-of-band) → recreate: `kuma.Upsert(ctx, 0, spec)`.
-4. Otherwise (spec changed, or recreating after drift):
+   - Present but drifted (edited out-of-band) → correct in place:
+     `kuma.Upsert(ctx, status.monitorID, spec)`.
+4. Otherwise (spec changed, or recreating/correcting after drift):
    `kuma.Upsert(ctx, status.monitorID, spec)`, patch `status.monitorID`,
    `status.observedGeneration`, and the `Ready` condition, ensure finalizer
    present, requeue after `driftCheckInterval`.
@@ -392,8 +402,9 @@ reconcilers disabled — the same shape used here.
   Ingress/HTTPRoute (which can track several monitors per resource), only
   the missing host(s) are recreated — hosts still present are left
   completely untouched, so this can't reintroduce the redundant-editMonitor
-  bug it's built next to. Verified `ExistingIDs` against a real Kuma
-  instance (not just `FakeClient`) before relying on it.
+  bug it's built next to. Verified `ExistingIDs` (since renamed to
+  `ExistingSpecs`, see below) against a real Kuma instance (not just
+  `FakeClient`) before relying on it.
 - **Follow-up: made `driftCheckInterval` configurable.** It was a hardcoded
   5-minute constant. A user reported the operator only recovered a
   Kuma-deleted monitor after a pod restart; investigation traced this to
@@ -403,3 +414,27 @@ reconcilers disabled — the same shape used here.
   `DriftCheckInterval time.Duration` field on each reconciler, sourced from
   `config.Config.DriftCheckInterval` (env var `DRIFT_CHECK_INTERVAL`, a Go
   duration string, default `config.DefaultDriftCheckInterval` = 5m).
+- **Follow-up: drift detection now also catches configuration drift, not
+  just deletion.** The original drift check (`kuma.Client.ExistingIDs`)
+  only asked "does this ID still exist?" — a monitor edited directly in
+  Kuma (e.g. its URL changed in the UI) kept its ID, so it was never
+  noticed or corrected. Renamed `ExistingIDs` to `ExistingSpecs`
+  (`map[int64]MonitorSpec` instead of `map[int64]bool`), backed by a new
+  `kuma.FromBremlMonitor` (the reverse of `ToBremlMonitor`, decoding a live
+  monitor's type-specific fields via breml's `monitor.Base.As`) and
+  `kuma.Equivalent(desired, live MonitorSpec) bool`, which compares only
+  the fields the operator manages (Name, Interval, RetryInterval,
+  MaxRetries, and the type-specific fields) — not every field Kuma tracks
+  (tags, notifications, description, active state, etc. stay
+  user-managed). Both sides are normalized (`normalizeSpec`, the same
+  default-filling `ToBremlMonitor` uses) before comparing, so a desired
+  spec that leaves optional fields unset still matches Kuma's live spec,
+  which always reflects the default actually applied. `allExist`/
+  `recreateMissing` became `specsMatch`/`reconcileDrift`: a present-but-
+  drifted host is now corrected in place (`Upsert(ctx, existingID, spec)`)
+  rather than only a missing one being recreated (`Upsert(ctx, 0, spec)`)
+  — still touching only the drifted host(s), preserving the
+  redundant-editMonitor guarantee. Verified end-to-end against a real Kuma
+  instance: `Base.Type()`/`Base.As()` round-trip correctly on a monitor
+  fetched via `GetMonitors`, and `ExistingSpecs` correctly observes an
+  out-of-band edit made through a second, independent client connection.

@@ -1,6 +1,7 @@
 package kuma
 
 import (
+	"encoding/json"
 	"testing"
 
 	bremlmonitor "github.com/breml/go-uptime-kuma-client/monitor"
@@ -63,6 +64,73 @@ func TestToBremlMonitor_DNS(t *testing.T) {
 	}
 	if dns.Hostname != "example.com" || dns.ResolverServer != "1.1.1.1" || dns.ResolveType != bremlmonitor.DNSResolveTypeA {
 		t.Errorf("DNS fields = %+v, want Hostname=example.com ResolverServer=1.1.1.1 ResolveType=A", dns.DNSDetails)
+	}
+}
+
+func TestFromBremlMonitor_RoundTripsThroughToBremlMonitor(t *testing.T) {
+	cases := []struct {
+		name string
+		spec MonitorSpec
+	}{
+		{"HTTP", MonitorSpec{Type: TypeHTTP, Name: "web", HTTP: &HTTPSpec{URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}}}},
+		{"TCP", MonitorSpec{Type: TypeTCP, Name: "port", TCP: &TCPSpec{Host: "example.com", Port: 443}}},
+		{"Ping", MonitorSpec{Type: TypePing, Name: "ping", Ping: &PingSpec{Host: "10.0.0.1"}}},
+		{"DNS", MonitorSpec{Type: TypeDNS, Name: "dns", DNS: &DNSSpec{Host: "example.com", ResolverServer: "1.1.1.1", ResolveType: "A", Port: 53}}},
+		{"Gamedig", MonitorSpec{Type: TypeGamedig, Name: "game", Gamedig: &GamedigSpec{Host: "game.example.com", Port: 27015, Game: "csgo"}}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mon, err := ToBremlMonitor(7, c.spec)
+			if err != nil {
+				t.Fatalf("ToBremlMonitor: %v", err)
+			}
+			// Round-trip through JSON, the same path GetMonitors uses: Base's
+			// UnmarshalJSON is what populates the internal type/raw state
+			// FromBremlMonitor's As() call depends on.
+			data, err := json.Marshal(mon)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			var base bremlmonitor.Base
+			if err := json.Unmarshal(data, &base); err != nil {
+				t.Fatalf("unmarshal into Base: %v", err)
+			}
+
+			got, err := FromBremlMonitor(base)
+			if err != nil {
+				t.Fatalf("FromBremlMonitor: %v", err)
+			}
+			if !Equivalent(c.spec, got) {
+				t.Errorf("FromBremlMonitor(round-tripped ToBremlMonitor(%+v)) = %+v, want an equivalent spec", c.spec, got)
+			}
+		})
+	}
+}
+
+func TestEquivalent_DetectsDrift(t *testing.T) {
+	base := MonitorSpec{Type: TypeHTTP, Name: "web", HTTP: &HTTPSpec{URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}}}
+	changedURL := base
+	changedURL.HTTP = &HTTPSpec{URL: "https://changed.example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}}
+	changedType := MonitorSpec{Type: TypeTCP, Name: "web", TCP: &TCPSpec{Host: "example.com", Port: 80}}
+
+	if !Equivalent(base, base) {
+		t.Error("Equivalent(base, base) = false, want true")
+	}
+	if Equivalent(base, changedURL) {
+		t.Error("Equivalent(base, changedURL) = true, want false")
+	}
+	if Equivalent(base, changedType) {
+		t.Error("Equivalent(base, changedType) = true, want false")
+	}
+}
+
+func TestEquivalent_UnsetOptionalFieldsMatchAppliedDefaults(t *testing.T) {
+	desired := MonitorSpec{Type: TypeHTTP, Name: "web", HTTP: &HTTPSpec{URL: "https://example.com/"}}
+	live := MonitorSpec{Type: TypeHTTP, Name: "web", Interval: 60, RetryInterval: 60,
+		HTTP: &HTTPSpec{URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}}}
+
+	if !Equivalent(desired, live) {
+		t.Error("Equivalent(desired, live) = false, want true — desired's unset optional fields should match Kuma's applied defaults")
 	}
 }
 

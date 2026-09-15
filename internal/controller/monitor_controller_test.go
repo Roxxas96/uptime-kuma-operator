@@ -199,7 +199,7 @@ func TestMonitorReconciler_SecondReconcileDoesNotWriteStatus(t *testing.T) {
 // of the no-op-reconcile fix above: skipping Kuma when nothing changed must
 // not mean skipping it forever. If the monitor is deleted directly in Kuma
 // (not through the operator), the next reconcile — even with an unchanged
-// spec — must notice via ExistingIDs and recreate it, since the source
+// spec — must notice via ExistingSpecs and recreate it, since the source
 // (this Monitor CR) is still present.
 func TestMonitorReconciler_RecreatesMonitorDeletedOutOfBand(t *testing.T) {
 	ctx := context.Background()
@@ -264,6 +264,73 @@ func TestMonitorReconciler_RecreatesMonitorDeletedOutOfBand(t *testing.T) {
 	newID, _ := strconv.ParseInt(second.Status.MonitorID, 10, 64)
 	if _, ok := fake.Monitors[newID]; !ok {
 		t.Errorf("fake Kuma client has no monitor with the recorded id %d", newID)
+	}
+}
+
+// TestMonitorReconciler_CorrectsConfigDriftedOutOfBand covers the other
+// kind of drift ExistingSpecs exists to catch: the monitor still exists in
+// Kuma, but someone changed its configuration directly (e.g. in the Kuma
+// UI) so it no longer matches the Monitor CR's spec. The next reconcile —
+// even with an unchanged CR — must notice and correct it in place, without
+// touching its Kuma ID.
+func TestMonitorReconciler_CorrectsConfigDriftedOutOfBand(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newMonitorReconciler(t)
+
+	mon := &uptimekumaiov1alpha1.Monitor{
+		ObjectMeta: metav1.ObjectMeta{Name: "config-drifted", Namespace: "default"},
+		Spec: uptimekumaiov1alpha1.MonitorSpec{
+			Type: uptimekumaiov1alpha1.MonitorTypePing,
+			Ping: &uptimekumaiov1alpha1.PingMonitorSpec{Host: "10.0.0.20"},
+		},
+	}
+	if err := k8sClient.Create(ctx, mon); err != nil {
+		t.Fatalf("create Monitor: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mon.Name, Namespace: mon.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, mon)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("first Reconcile: %v", err)
+	}
+	first := &uptimekumaiov1alpha1.Monitor{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, first); err != nil {
+		t.Fatalf("get after first reconcile: %v", err)
+	}
+	originalID, err := strconv.ParseInt(first.Status.MonitorID, 10, 64)
+	if err != nil {
+		t.Fatalf("parse monitor id: %v", err)
+	}
+
+	// Simulate someone editing the monitor directly in Kuma, out of band —
+	// the Monitor CR itself is untouched, spec unchanged.
+	fake.Monitors[originalID] = kuma.MonitorSpec{
+		Type: kuma.TypePing, Name: fake.Monitors[originalID].Name,
+		Ping: &kuma.PingSpec{Host: "10.0.0.99"},
+	}
+	fake.UpsertCalls = 0 // reset: count only what the second Reconcile does
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("second Reconcile (should correct the drift): %v", err)
+	}
+
+	if fake.UpsertCalls != 1 {
+		t.Errorf("Kuma Upsert called %d times, want exactly 1 (correcting the drifted config)", fake.UpsertCalls)
+	}
+
+	second := &uptimekumaiov1alpha1.Monitor{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, second); err != nil {
+		t.Fatalf("get after second reconcile: %v", err)
+	}
+	if second.Status.MonitorID != first.Status.MonitorID {
+		t.Errorf("status.monitorID changed from %q to %q — a config correction must update in place, not recreate",
+			first.Status.MonitorID, second.Status.MonitorID)
+	}
+	if got := fake.Monitors[originalID].Ping.Host; got != "10.0.0.20" {
+		t.Errorf("corrected Ping.Host = %q, want %q (the Monitor CR's desired value)", got, "10.0.0.20")
 	}
 }
 

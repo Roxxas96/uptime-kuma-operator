@@ -60,12 +60,48 @@ func TestRealClient_CreateUpdateDelete(t *testing.T) {
 		t.Fatalf("Upsert DNS create: %v", err)
 	}
 
-	existingIDs, err := client.ExistingIDs(ctx)
+	existingSpecs, err := client.ExistingSpecs(ctx)
 	if err != nil {
-		t.Fatalf("ExistingIDs: %v", err)
+		t.Fatalf("ExistingSpecs: %v", err)
 	}
-	if !existingIDs[id] || !existingIDs[dnsID] {
-		t.Errorf("ExistingIDs = %v, want both %d and %d present", existingIDs, id, dnsID)
+	if _, ok := existingSpecs[id]; !ok {
+		t.Errorf("ExistingSpecs = %v, want %d present", existingSpecs, id)
+	}
+	if _, ok := existingSpecs[dnsID]; !ok {
+		t.Errorf("ExistingSpecs = %v, want %d present", existingSpecs, dnsID)
+	}
+	wantHTTP := kuma.MonitorSpec{
+		Type: kuma.TypeHTTP, Name: "integration-test-http-renamed",
+		HTTP: &kuma.HTTPSpec{URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}},
+	}
+	if got := existingSpecs[id]; !kuma.Equivalent(wantHTTP, got) {
+		t.Errorf("ExistingSpecs[%d] = %+v, want a spec Equivalent to %+v", id, got, wantHTTP)
+	}
+
+	// Simulate an out-of-band edit — e.g. someone changing the monitor
+	// directly in the Kuma UI — via a second, independent client
+	// connection, and confirm ExistingSpecs reports the *new* live
+	// configuration, not what the operator originally sent.
+	editor, err := kuma.NewClient(ctx, url, user, pass)
+	if err != nil {
+		t.Fatalf("NewClient (editor): %v", err)
+	}
+	editedSpec := kuma.MonitorSpec{
+		Type: kuma.TypeHTTP, Name: "integration-test-http-edited-out-of-band",
+		HTTP: &kuma.HTTPSpec{URL: "https://changed-out-of-band.example.com/"},
+	}
+	if _, err := editor.Upsert(ctx, id, editedSpec); err != nil {
+		t.Fatalf("simulate out-of-band edit: %v", err)
+	}
+	existingSpecs, err = client.ExistingSpecs(ctx)
+	if err != nil {
+		t.Fatalf("ExistingSpecs after out-of-band edit: %v", err)
+	}
+	if got := existingSpecs[id]; kuma.Equivalent(wantHTTP, got) {
+		t.Errorf("ExistingSpecs[%d] = %+v, still Equivalent to the original config — out-of-band edit was not observed", id, got)
+	}
+	if got := existingSpecs[id]; !kuma.Equivalent(editedSpec, got) {
+		t.Errorf("ExistingSpecs[%d] = %+v, want a spec Equivalent to the out-of-band edit %+v", id, got, editedSpec)
 	}
 
 	if err := client.Delete(ctx, id); err != nil {
@@ -75,12 +111,15 @@ func TestRealClient_CreateUpdateDelete(t *testing.T) {
 		t.Errorf("Delete DNS monitor: %v", err)
 	}
 
-	existingIDs, err = client.ExistingIDs(ctx)
+	existingSpecs, err = client.ExistingSpecs(ctx)
 	if err != nil {
-		t.Fatalf("ExistingIDs after delete: %v", err)
+		t.Fatalf("ExistingSpecs after delete: %v", err)
 	}
-	if existingIDs[id] || existingIDs[dnsID] {
-		t.Errorf("ExistingIDs = %v, want neither %d nor %d present after deletion", existingIDs, id, dnsID)
+	if _, ok := existingSpecs[id]; ok {
+		t.Errorf("ExistingSpecs = %v, want %d absent after deletion", existingSpecs, id)
+	}
+	if _, ok := existingSpecs[dnsID]; ok {
+		t.Errorf("ExistingSpecs = %v, want %d absent after deletion", existingSpecs, dnsID)
 	}
 }
 

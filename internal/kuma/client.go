@@ -23,13 +23,16 @@ const connectTimeout = 30 * time.Second
 type Client interface {
 	Upsert(ctx context.Context, id int64, spec MonitorSpec) (int64, error)
 	Delete(ctx context.Context, id int64) error
-	// ExistingIDs returns the set of Kuma monitor IDs that currently exist.
-	// Reconcilers use it to detect drift — a monitor deleted out-of-band
-	// (e.g. manually in the Kuma UI) — without an Upsert/editMonitor
-	// round-trip per candidate ID, and without the false negative a
-	// per-ID "get" would give were it to change error shape across Kuma
-	// versions (see the design spec's decisions log).
-	ExistingIDs(ctx context.Context) (map[int64]bool, error)
+	// ExistingSpecs returns every Kuma monitor's ID mapped to its current
+	// configuration. Reconcilers use it to detect two kinds of drift: a
+	// monitor deleted out-of-band (absent from the map — e.g. manually in
+	// the Kuma UI) and one edited out-of-band so its configuration no
+	// longer matches the Kubernetes resource that owns it (present, but
+	// not Equivalent to the desired spec). A single list call avoids an
+	// Upsert/editMonitor round-trip per candidate ID, and avoids the false
+	// negative a per-ID "get" would give were it to change error shape
+	// across Kuma versions (see the design spec's decisions log).
+	ExistingSpecs(ctx context.Context) (map[int64]MonitorSpec, error)
 }
 
 // realClient is a Client backed by a real Socket.IO connection to an
@@ -81,16 +84,20 @@ func (r *realClient) Delete(ctx context.Context, id int64) error {
 	return r.inner.DeleteMonitor(ctx, id)
 }
 
-func (r *realClient) ExistingIDs(ctx context.Context) (map[int64]bool, error) {
+func (r *realClient) ExistingSpecs(ctx context.Context) (map[int64]MonitorSpec, error) {
 	monitors, err := r.inner.GetMonitors(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ids := make(map[int64]bool, len(monitors))
+	specs := make(map[int64]MonitorSpec, len(monitors))
 	for _, m := range monitors {
-		ids[m.ID] = true
+		spec, err := FromBremlMonitor(m)
+		if err != nil {
+			return nil, err
+		}
+		specs[m.GetID()] = spec
 	}
-	return ids, nil
+	return specs, nil
 }
 
 var _ Client = (*realClient)(nil)
