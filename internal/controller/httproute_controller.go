@@ -16,10 +16,12 @@ import (
 )
 
 type HTTPRouteReconciler struct {
-	Client   client.Client
-	Kuma     kuma.Client
-	WatchAll bool
-	Recorder record.EventRecorder
+	Client client.Client
+	Kuma   kuma.Client
+	// OptInByDefault controls the annotation policy only — it is independent
+	// of which namespaces the manager watches (config.Config.WatchAll).
+	OptInByDefault bool
+	Recorder       record.EventRecorder
 }
 
 func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -45,7 +47,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	if !annotations.ShouldSync(r.WatchAll, route.Annotations) {
+	if !annotations.ShouldSync(r.OptInByDefault, route.Annotations) {
 		existingIDs, err := annotations.ParseMonitorIDs(route.Annotations)
 		if err != nil {
 			return ctrl.Result{}, err

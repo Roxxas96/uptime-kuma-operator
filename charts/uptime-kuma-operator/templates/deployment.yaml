@@ -34,6 +34,8 @@ spec:
               value: {{ .Values.watchAll | quote }}
             - name: WATCH_NAMESPACES
               value: {{ join "," .Values.watchNamespaces | quote }}
+            - name: OPT_IN_BY_DEFAULT
+              value: {{ .Values.optInByDefault | quote }}
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:

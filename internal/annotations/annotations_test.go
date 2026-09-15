@@ -4,22 +4,22 @@ import "testing"
 
 func TestShouldSync(t *testing.T) {
 	cases := []struct {
-		name     string
-		watchAll bool
-		ann      map[string]string
-		want     bool
+		name           string
+		optInByDefault bool
+		ann            map[string]string
+		want           bool
 	}{
-		{"default mode, no annotation", false, nil, false},
-		{"default mode, enabled=true", false, map[string]string{Enabled: "true"}, true},
-		{"default mode, enabled=false", false, map[string]string{Enabled: "false"}, false},
-		{"watch-all, no annotation", true, nil, true},
-		{"watch-all, enabled=false opts out", true, map[string]string{Enabled: "false"}, false},
-		{"watch-all, enabled=true", true, map[string]string{Enabled: "true"}, true},
+		{"opt-in required, no annotation", false, nil, false},
+		{"opt-in required, enabled=true", false, map[string]string{Enabled: "true"}, true},
+		{"opt-in required, enabled=false", false, map[string]string{Enabled: "false"}, false},
+		{"opt-in by default, no annotation", true, nil, true},
+		{"opt-in by default, enabled=false opts out", true, map[string]string{Enabled: "false"}, false},
+		{"opt-in by default, enabled=true", true, map[string]string{Enabled: "true"}, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := ShouldSync(c.watchAll, c.ann); got != c.want {
-				t.Errorf("ShouldSync(%v, %v) = %v, want %v", c.watchAll, c.ann, got, c.want)
+			if got := ShouldSync(c.optInByDefault, c.ann); got != c.want {
+				t.Errorf("ShouldSync(%v, %v) = %v, want %v", c.optInByDefault, c.ann, got, c.want)
 			}
 		})
 	}

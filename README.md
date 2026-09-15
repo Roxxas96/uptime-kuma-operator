@@ -28,15 +28,21 @@ the full design.
 
    `watchNamespaces` lists the namespaces to watch; it defaults to the
    release namespace. Set `--set watchAll=true` instead to watch the whole
-   cluster (which switches the chart from per-namespace `Role`s to a
-   `ClusterRole`, and flips the opt-in default: every `Ingress`/`HTTPRoute`
-   is synced unless annotated `uptime-kuma.io/enabled=false`).
+   cluster (switches the chart from per-namespace `Role`s to a
+   `ClusterRole`). This only changes *which namespaces* are watched — it
+   has no effect on whether a resource needs the opt-in annotation below.
 
 3. Opt an Ingress in:
 
    ```bash
    kubectl annotate ingress my-app uptime-kuma.io/enabled=true
    ```
+
+   By default every `Ingress`/`HTTPRoute` needs this annotation to be
+   synced, regardless of `watchAll`. Set `--set optInByDefault=true` to
+   invert that: every resource is synced unless annotated
+   `uptime-kuma.io/enabled=false`. `watchAll` and `optInByDefault` are
+   independent — set either, both, or neither.
 
 4. Or declare a monitor Kuma can't derive from routing (DNS, Gamedig, TCP,
    Ping) with a `Monitor` CR — see

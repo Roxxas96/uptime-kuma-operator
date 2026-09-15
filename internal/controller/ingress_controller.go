@@ -16,10 +16,12 @@ import (
 )
 
 type IngressReconciler struct {
-	Client   client.Client
-	Kuma     kuma.Client
-	WatchAll bool
-	Recorder record.EventRecorder
+	Client client.Client
+	Kuma   kuma.Client
+	// OptInByDefault controls the annotation policy only — it is independent
+	// of which namespaces the manager watches (config.Config.WatchAll).
+	OptInByDefault bool
+	Recorder       record.EventRecorder
 }
 
 func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -45,7 +47,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
-	if !annotations.ShouldSync(r.WatchAll, ing.Annotations) {
+	if !annotations.ShouldSync(r.OptInByDefault, ing.Annotations) {
 		existingIDs, err := annotations.ParseMonitorIDs(ing.Annotations)
 		if err != nil {
 			return ctrl.Result{}, err

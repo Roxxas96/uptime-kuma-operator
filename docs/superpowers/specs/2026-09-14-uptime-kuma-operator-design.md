@@ -82,11 +82,19 @@ Env vars, credentials from a mounted `Secret`:
 KUMA_URL=https://kuma.example.com
 KUMA_USERNAME / KUMA_PASSWORD   (from Secret)
 WATCH_NAMESPACES=prod,staging    # empty/unset = operator's own namespace only
-WATCH_ALL=false                  # true = sync everything not explicitly opted out
+WATCH_ALL=false                  # true = watch every namespace (namespace scope only)
+OPT_IN_BY_DEFAULT=false          # true = sync everything not explicitly opted out
 ```
 
-Changing `WATCH_NAMESPACES` or `WATCH_ALL` requires a pod restart (no
-hot-reload watcher) — acceptable since this changes rarely.
+`WATCH_ALL` and `OPT_IN_BY_DEFAULT` are deliberately independent: `WATCH_ALL`
+only decides which namespaces the operator watches (and, via the Helm chart,
+whether it gets a `ClusterRole` or per-namespace `Role`s). It has no bearing
+on the annotation contract below — watching every namespace does not exempt
+a resource from needing `uptime-kuma.io/enabled=true`. Only
+`OPT_IN_BY_DEFAULT` controls that.
+
+Changing `WATCH_NAMESPACES`, `WATCH_ALL`, or `OPT_IN_BY_DEFAULT` requires a
+pod restart (no hot-reload watcher) — acceptable since this changes rarely.
 
 Startup fails fast (non-zero exit, no retry) if Kuma credentials are
 invalid — there's no point running controllers that can never sync.
@@ -95,7 +103,7 @@ invalid — there's no point running controllers that can never sync.
 
 | Annotation | Purpose |
 |---|---|
-| `uptime-kuma.io/enabled` | `"true"` / `"false"`. In default mode: opt in. In `WATCH_ALL` mode: opt out. Absent: not synced (default mode) / synced (watch-all mode). |
+| `uptime-kuma.io/enabled` | `"true"` / `"false"`. Governed by `OPT_IN_BY_DEFAULT`, not `WATCH_ALL`: opt-in mode (default) requires it; opt-out mode requires it only to exclude a resource. Absent: not synced (opt-in mode) / synced (opt-out mode). |
 | `uptime-kuma.io/name` | Friendly monitor name override. Default: derived from `<namespace>/<name>/<host>`. |
 | `uptime-kuma.io/scheme` | `http` or `https` override. HTTPRoute only — Ingress infers scheme from `spec.tls`. |
 | `uptime-kuma.io/interval` | Seconds between checks. Optional, Kuma default otherwise. |
@@ -111,10 +119,11 @@ Both controllers share this logic:
 1. Fetch the resource. Not found → nothing to do (cleanup already happened
    via the finalizer path on delete).
 2. Check the namespace is in the watched set (controller-level predicate,
-   not per-reconcile logic).
-3. Compute `shouldSync`:
-   - `WATCH_ALL=true`: sync unless `uptime-kuma.io/enabled: "false"`.
-   - `WATCH_ALL=false` (default): sync only if `uptime-kuma.io/enabled: "true"`.
+   not per-reconcile logic) — this is `WATCH_ALL`/`WATCH_NAMESPACES`'s only
+   role in this flow.
+3. Compute `shouldSync` from `OPT_IN_BY_DEFAULT` (not `WATCH_ALL`):
+   - `OPT_IN_BY_DEFAULT=true`: sync unless `uptime-kuma.io/enabled: "false"`.
+   - `OPT_IN_BY_DEFAULT=false` (default): sync only if `uptime-kuma.io/enabled: "true"`.
 4. If `!shouldSync` and `monitor-ids` is non-empty (previously synced, now
    opted out): delete every listed Kuma monitor, clear the annotation,
    remove the finalizer. Return.
@@ -272,3 +281,10 @@ reconcilers disabled — the same shape used here.
 - HTTPRoute scheme: one monitor per hostname, assume HTTPS, override via
   annotation — deliberately not resolving the parent Gateway/Listener, to
   avoid extra RBAC and re-reconcile complexity for a rare case.
+- **Correction (post-implementation):** the initial design conflated
+  `WATCH_ALL` (namespace scope) with the annotation opt-in/opt-out policy —
+  `WATCH_ALL=true` silently also meant "sync everything by default." Split
+  into two independent settings: `WATCH_ALL` now governs namespace scope
+  only, and a new `OPT_IN_BY_DEFAULT` governs the annotation policy. Watching
+  every namespace no longer implies exempting resources from the opt-in
+  annotation.
