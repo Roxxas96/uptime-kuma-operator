@@ -13,16 +13,18 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"uptime-kuma-operator/internal/annotations"
+	"uptime-kuma-operator/internal/config"
 	"uptime-kuma-operator/internal/kuma"
 )
 
 func newHTTPRouteReconciler(optInByDefault bool) (*HTTPRouteReconciler, *kuma.FakeClient) {
 	fake := kuma.NewFakeClient()
 	return &HTTPRouteReconciler{
-		Client:         k8sClient,
-		Kuma:           fake,
-		OptInByDefault: optInByDefault,
-		Recorder:       record.NewFakeRecorder(16),
+		Client:             k8sClient,
+		Kuma:               fake,
+		OptInByDefault:     optInByDefault,
+		Recorder:           record.NewFakeRecorder(16),
+		DriftCheckInterval: config.DefaultDriftCheckInterval,
 	}, fake
 }
 

@@ -13,16 +13,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"uptime-kuma-operator/internal/annotations"
+	"uptime-kuma-operator/internal/config"
 	"uptime-kuma-operator/internal/kuma"
 )
 
 func newIngressReconciler(optInByDefault bool) (*IngressReconciler, *kuma.FakeClient) {
 	fake := kuma.NewFakeClient()
 	return &IngressReconciler{
-		Client:         k8sClient,
-		Kuma:           fake,
-		OptInByDefault: optInByDefault,
-		Recorder:       record.NewFakeRecorder(16),
+		Client:             k8sClient,
+		Kuma:               fake,
+		OptInByDefault:     optInByDefault,
+		Recorder:           record.NewFakeRecorder(16),
+		DriftCheckInterval: config.DefaultDriftCheckInterval,
 	}, fake
 }
 

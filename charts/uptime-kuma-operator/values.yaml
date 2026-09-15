@@ -14,3 +14,8 @@ watchNamespaces: [] # e.g. ["prod", "staging"]; ignored (cluster-wide RBAC used)
 # default) requires it everywhere, including when watchAll is true — set
 # this to true to sync everything unless annotated enabled=false instead.
 optInByDefault: false
+
+# How often a reconciler that found nothing to sync re-checks that Kuma
+# still has the monitor(s) it's supposed to, recreating any deleted
+# out-of-band (e.g. manually in the Kuma UI). Go duration string.
+driftCheckInterval: 5m

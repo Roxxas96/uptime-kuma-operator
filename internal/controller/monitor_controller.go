@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"strconv"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -21,6 +22,10 @@ import (
 type MonitorReconciler struct {
 	Client client.Client
 	Kuma   kuma.Client
+	// DriftCheckInterval is how often a reconcile that found nothing to sync
+	// re-checks that Kuma still has the monitor it's supposed to, recreating
+	// it if deleted out-of-band (e.g. manually in the Kuma UI).
+	DriftCheckInterval time.Duration
 }
 
 func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -79,7 +84,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if liveIDs[existingID] {
 			// Nothing changed and Kuma still has it — nothing to do, but
 			// check again later in case it's deleted out-of-band.
-			return ctrl.Result{RequeueAfter: driftCheckInterval}, nil
+			return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 		}
 		log.Info("Kuma monitor no longer exists, recreating", "monitorID", mon.Status.MonitorID)
 		existingID = 0 // force a create — the old id is gone, an update would fail
@@ -99,7 +104,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{RequeueAfter: driftCheckInterval}, nil
+	return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 }
 
 // updateStatus applies the Kuma monitor ID (when non-empty) and the Ready

@@ -14,13 +14,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	uptimekumaiov1alpha1 "uptime-kuma-operator/api/v1alpha1"
+	"uptime-kuma-operator/internal/config"
 	"uptime-kuma-operator/internal/kuma"
 )
 
 func newMonitorReconciler(t *testing.T) (*MonitorReconciler, *kuma.FakeClient) {
 	t.Helper()
 	fake := kuma.NewFakeClient()
-	return &MonitorReconciler{Client: k8sClient, Kuma: fake}, fake
+	return &MonitorReconciler{Client: k8sClient, Kuma: fake, DriftCheckInterval: config.DefaultDriftCheckInterval}, fake
 }
 
 func TestMonitorReconciler_CreatesMonitorAndSetsStatus(t *testing.T) {
