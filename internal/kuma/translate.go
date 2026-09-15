@@ -74,9 +74,17 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 		return &bremlmonitor.HTTP{
 			Base: base,
 			HTTPDetails: bremlmonitor.HTTPDetails{
-				URL:                 spec.HTTP.URL,
-				Method:              spec.HTTP.Method,
-				AcceptedStatusCodes: spec.HTTP.AcceptedStatusCodes,
+				URL:                      spec.HTTP.URL,
+				Method:                   spec.HTTP.Method,
+				AcceptedStatusCodes:      spec.HTTP.AcceptedStatusCodes,
+				Timeout:                  spec.HTTP.Timeout,
+				MaxRedirects:             spec.HTTP.MaxRedirects,
+				IgnoreTLS:                spec.HTTP.IgnoreTLS,
+				CacheBust:                spec.HTTP.CacheBust,
+				ExpiryNotification:       spec.HTTP.ExpiryNotification,
+				DomainExpiryNotification: spec.HTTP.DomainExpiryNotification,
+				Headers:                  spec.HTTP.Headers,
+				Body:                     spec.HTTP.Body,
 			},
 		}, nil
 
@@ -161,7 +169,12 @@ func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 		if err := base.As(&d); err != nil {
 			return MonitorSpec{}, fmt.Errorf("kuma: decode HTTP monitor %d: %w", base.GetID(), err)
 		}
-		spec.HTTP = &HTTPSpec{URL: d.URL, Method: d.Method, AcceptedStatusCodes: d.AcceptedStatusCodes}
+		spec.HTTP = &HTTPSpec{
+			URL: d.URL, Method: d.Method, AcceptedStatusCodes: d.AcceptedStatusCodes,
+			Timeout: d.Timeout, MaxRedirects: d.MaxRedirects, IgnoreTLS: d.IgnoreTLS,
+			CacheBust: d.CacheBust, ExpiryNotification: d.ExpiryNotification,
+			DomainExpiryNotification: d.DomainExpiryNotification, Headers: d.Headers, Body: d.Body,
+		}
 	case "port":
 		spec.Type = TypeTCP
 		var d bremlmonitor.TCPPort
@@ -220,7 +233,15 @@ func Equivalent(desired, live MonitorSpec) bool {
 		return d.HTTP != nil && live.HTTP != nil &&
 			d.HTTP.URL == live.HTTP.URL &&
 			d.HTTP.Method == live.HTTP.Method &&
-			slices.Equal(d.HTTP.AcceptedStatusCodes, live.HTTP.AcceptedStatusCodes)
+			slices.Equal(d.HTTP.AcceptedStatusCodes, live.HTTP.AcceptedStatusCodes) &&
+			d.HTTP.Timeout == live.HTTP.Timeout &&
+			d.HTTP.MaxRedirects == live.HTTP.MaxRedirects &&
+			d.HTTP.IgnoreTLS == live.HTTP.IgnoreTLS &&
+			d.HTTP.CacheBust == live.HTTP.CacheBust &&
+			d.HTTP.ExpiryNotification == live.HTTP.ExpiryNotification &&
+			d.HTTP.DomainExpiryNotification == live.HTTP.DomainExpiryNotification &&
+			d.HTTP.Headers == live.HTTP.Headers &&
+			d.HTTP.Body == live.HTTP.Body
 	case TypeTCP:
 		return d.TCP != nil && live.TCP != nil && *d.TCP == *live.TCP
 	case TypePing:

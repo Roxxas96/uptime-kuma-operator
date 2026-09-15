@@ -207,3 +207,70 @@ func TestEquivalent_DetectsDrift_CommonFields(t *testing.T) {
 		t.Error("Equivalent(base, changedUpsideDown) = true, want false")
 	}
 }
+
+func TestFromBremlMonitor_RoundTripsThroughToBremlMonitor_HTTPFields(t *testing.T) {
+	spec := MonitorSpec{
+		Type: TypeHTTP, Name: "web",
+		HTTP: &HTTPSpec{
+			URL: "https://example.com/", Method: "POST", AcceptedStatusCodes: []string{"200-299"},
+			Timeout: 30, MaxRedirects: 5, IgnoreTLS: true, CacheBust: true,
+			ExpiryNotification: true, DomainExpiryNotification: true,
+			Headers: `{"X-Custom":"value"}`, Body: `{"key":"value"}`,
+		},
+	}
+
+	mon, err := ToBremlMonitor(7, spec)
+	if err != nil {
+		t.Fatalf("ToBremlMonitor: %v", err)
+	}
+	data, err := json.Marshal(mon)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var base bremlmonitor.Base
+	if err := json.Unmarshal(data, &base); err != nil {
+		t.Fatalf("unmarshal into Base: %v", err)
+	}
+
+	got, err := FromBremlMonitor(base)
+	if err != nil {
+		t.Fatalf("FromBremlMonitor: %v", err)
+	}
+	if !Equivalent(spec, got) {
+		t.Errorf("FromBremlMonitor(round-tripped ToBremlMonitor(%+v)) = %+v, want an equivalent spec", spec, got)
+	}
+}
+
+func TestEquivalent_DetectsDrift_HTTPFields(t *testing.T) {
+	base := MonitorSpec{Type: TypeHTTP, Name: "web", HTTP: &HTTPSpec{
+		URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"},
+		Timeout: 30, MaxRedirects: 5,
+	}}
+
+	changedTimeout := base
+	changedTimeout.HTTP = &HTTPSpec{
+		URL: base.HTTP.URL, Method: base.HTTP.Method, AcceptedStatusCodes: base.HTTP.AcceptedStatusCodes,
+		Timeout: 60, MaxRedirects: base.HTTP.MaxRedirects,
+	}
+	if Equivalent(base, changedTimeout) {
+		t.Error("Equivalent(base, changedTimeout) = true, want false")
+	}
+
+	changedIgnoreTLS := base
+	changedIgnoreTLS.HTTP = &HTTPSpec{
+		URL: base.HTTP.URL, Method: base.HTTP.Method, AcceptedStatusCodes: base.HTTP.AcceptedStatusCodes,
+		Timeout: base.HTTP.Timeout, MaxRedirects: base.HTTP.MaxRedirects, IgnoreTLS: true,
+	}
+	if Equivalent(base, changedIgnoreTLS) {
+		t.Error("Equivalent(base, changedIgnoreTLS) = true, want false")
+	}
+
+	changedHeaders := base
+	changedHeaders.HTTP = &HTTPSpec{
+		URL: base.HTTP.URL, Method: base.HTTP.Method, AcceptedStatusCodes: base.HTTP.AcceptedStatusCodes,
+		Timeout: base.HTTP.Timeout, MaxRedirects: base.HTTP.MaxRedirects, Headers: `{"X-Custom":"value"}`,
+	}
+	if Equivalent(base, changedHeaders) {
+		t.Error("Equivalent(base, changedHeaders) = true, want false")
+	}
+}
