@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -18,6 +19,13 @@ import (
 	"uptime-kuma-operator/internal/derive"
 	"uptime-kuma-operator/internal/kuma"
 )
+
+// driftCheckInterval is how often a reconciler that found nothing to sync
+// (desiredHash/ObservedGeneration unchanged) re-checks that Kuma still has
+// what it's supposed to. Without this, a monitor deleted out-of-band (e.g.
+// manually in the Kuma UI) would never be noticed: nothing on the
+// Kubernetes side changes, so nothing re-triggers a reconcile.
+const driftCheckInterval = 5 * time.Minute
 
 // desiredHash returns a stable fingerprint of desired (the derived monitor
 // set for an Ingress/HTTPRoute — a function of both .spec and the override
@@ -86,6 +94,59 @@ func syncMonitors(ctx context.Context, kc kuma.Client, desired []derive.DesiredM
 		}
 	}
 
+	return newIDs, nil
+}
+
+// allExist reports whether every ID in existingIDs is present in liveIDs
+// (the current Kuma monitor set from kuma.Client.ExistingIDs). An
+// unparseable ID counts as missing, so a corrupted annotation triggers
+// recreation rather than being silently treated as fine.
+func allExist(existingIDs map[string]string, liveIDs map[int64]bool) bool {
+	for _, idStr := range existingIDs {
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil || !liveIDs[id] {
+			return false
+		}
+	}
+	return true
+}
+
+// recreateMissing recreates only the monitors in existingIDs that are
+// absent from liveIDs, leaving every other host's monitor untouched. It
+// returns the updated host -> id map.
+//
+// This is deliberately narrower than syncMonitors: it runs on the "nothing
+// changed since the last successful sync" path, where the desired
+// configuration for hosts that DO still exist is already correct — calling
+// kuma.Client.Upsert on them anyway would be the exact redundant-editMonitor
+// bug this whole mechanism exists to avoid. Only a host whose monitor
+// genuinely vanished (deleted out-of-band) gets a fresh Upsert(id=0, ...).
+func recreateMissing(ctx context.Context, kc kuma.Client, desired []derive.DesiredMonitor, existingIDs map[string]string, liveIDs map[int64]bool) (map[string]string, error) {
+	byHost := make(map[string]derive.DesiredMonitor, len(desired))
+	for _, dm := range desired {
+		byHost[dm.Host] = dm
+	}
+
+	newIDs := make(map[string]string, len(existingIDs))
+	for host, idStr := range existingIDs {
+		newIDs[host] = idStr
+	}
+
+	for host, idStr := range existingIDs {
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err == nil && liveIDs[id] {
+			continue // still exists, nothing to do
+		}
+		dm, ok := byHost[host]
+		if !ok {
+			continue // no longer desired either; the normal sync path handles removal
+		}
+		newID, err := kc.Upsert(ctx, 0, dm.Spec)
+		if err != nil {
+			return nil, err
+		}
+		newIDs[host] = strconv.FormatInt(newID, 10)
+	}
 	return newIDs, nil
 }
 

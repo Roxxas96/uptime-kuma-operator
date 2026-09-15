@@ -23,6 +23,13 @@ const connectTimeout = 30 * time.Second
 type Client interface {
 	Upsert(ctx context.Context, id int64, spec MonitorSpec) (int64, error)
 	Delete(ctx context.Context, id int64) error
+	// ExistingIDs returns the set of Kuma monitor IDs that currently exist.
+	// Reconcilers use it to detect drift — a monitor deleted out-of-band
+	// (e.g. manually in the Kuma UI) — without an Upsert/editMonitor
+	// round-trip per candidate ID, and without the false negative a
+	// per-ID "get" would give were it to change error shape across Kuma
+	// versions (see the design spec's decisions log).
+	ExistingIDs(ctx context.Context) (map[int64]bool, error)
 }
 
 // realClient is a Client backed by a real Socket.IO connection to an
@@ -72,6 +79,18 @@ func (r *realClient) Upsert(ctx context.Context, id int64, spec MonitorSpec) (in
 
 func (r *realClient) Delete(ctx context.Context, id int64) error {
 	return r.inner.DeleteMonitor(ctx, id)
+}
+
+func (r *realClient) ExistingIDs(ctx context.Context) (map[int64]bool, error) {
+	monitors, err := r.inner.GetMonitors(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ids := make(map[int64]bool, len(monitors))
+	for _, m := range monitors {
+		ids[m.ID] = true
+	}
+	return ids, nil
 }
 
 var _ Client = (*realClient)(nil)

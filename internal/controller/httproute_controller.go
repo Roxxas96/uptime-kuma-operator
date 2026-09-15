@@ -82,8 +82,23 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if hash == annotations.ParseSyncedHash(route.Annotations) {
 		// Nothing relevant (hostnames or override annotations) changed since
 		// the last successful sync — skip the Kuma round-trip. See
-		// desiredHash's doc comment for why this matters.
-		return ctrl.Result{}, nil
+		// desiredHash's doc comment for why this matters. But "skip" must not
+		// mean "forever": verify Kuma still has what we think it has, since a
+		// monitor deleted out-of-band (e.g. manually in the Kuma UI) would
+		// otherwise never be noticed or recreated.
+		liveIDs, err := r.Kuma.ExistingIDs(ctx)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if allExist(existingIDs, liveIDs) {
+			return ctrl.Result{RequeueAfter: driftCheckInterval}, nil
+		}
+		newIDs, err := recreateMissing(ctx, r.Kuma, desired, existingIDs, liveIDs)
+		if err != nil {
+			recordSyncFailure(r.Recorder, route, err)
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: driftCheckInterval}, persistMonitorIDs(ctx, r.Client, route, newIDs, true, hash)
 	}
 
 	newIDs, err := syncMonitors(ctx, r.Kuma, desired, existingIDs)
@@ -92,7 +107,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, persistMonitorIDs(ctx, r.Client, route, newIDs, true, hash)
+	return ctrl.Result{RequeueAfter: driftCheckInterval}, persistMonitorIDs(ctx, r.Client, route, newIDs, true, hash)
 }
 
 func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {

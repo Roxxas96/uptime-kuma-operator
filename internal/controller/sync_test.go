@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	networkingv1 "k8s.io/api/networking/v1"
@@ -9,6 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"uptime-kuma-operator/internal/annotations"
+	"uptime-kuma-operator/internal/derive"
+	"uptime-kuma-operator/internal/kuma"
 )
 
 // TestPersistMonitorIDs_NoOpDoesNotWrite guards against the same
@@ -213,5 +216,71 @@ func TestPersistMonitorIDs_WritesWhenHashChanges(t *testing.T) {
 	}
 	if got := annotations.ParseSyncedHash(afterSecond.Annotations); got != "hash-b" {
 		t.Errorf("SyncedHash = %q, want %q", got, "hash-b")
+	}
+}
+
+func TestAllExist(t *testing.T) {
+	cases := []struct {
+		name        string
+		existingIDs map[string]string
+		liveIDs     map[int64]bool
+		want        bool
+	}{
+		{"empty existingIDs", nil, map[int64]bool{}, true},
+		{"all present", map[string]string{"a.example.com": "1", "b.example.com": "2"}, map[int64]bool{1: true, 2: true}, true},
+		{"one missing", map[string]string{"a.example.com": "1", "b.example.com": "2"}, map[int64]bool{1: true}, false},
+		{"unparseable id counts as missing", map[string]string{"a.example.com": "not-a-number"}, map[int64]bool{}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := allExist(c.existingIDs, c.liveIDs); got != c.want {
+				t.Errorf("allExist(%v, %v) = %v, want %v", c.existingIDs, c.liveIDs, got, c.want)
+			}
+		})
+	}
+}
+
+func TestRecreateMissing_OnlyTouchesMissingHosts(t *testing.T) {
+	ctx := context.Background()
+	fake := kuma.NewFakeClient()
+
+	// Pre-populate Kuma directly so IDs 1 and 2 both "exist" initially —
+	// 1 stays, 2 is what we'll treat as deleted out-of-band.
+	id1, _ := fake.Upsert(ctx, 0, kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "a", HTTP: &kuma.HTTPSpec{URL: "https://a.example.com/"}})
+	id2, _ := fake.Upsert(ctx, 0, kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "b", HTTP: &kuma.HTTPSpec{URL: "https://b.example.com/"}})
+	if err := fake.Delete(ctx, id2); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	fake.UpsertCalls = 0 // reset so we can assert on recreateMissing's own calls only
+
+	existingIDs := map[string]string{
+		"a.example.com": strconv.FormatInt(id1, 10),
+		"b.example.com": strconv.FormatInt(id2, 10),
+	}
+	desired := []derive.DesiredMonitor{
+		{Host: "a.example.com", Spec: kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "a", HTTP: &kuma.HTTPSpec{URL: "https://a.example.com/"}}},
+		{Host: "b.example.com", Spec: kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "b", HTTP: &kuma.HTTPSpec{URL: "https://b.example.com/"}}},
+	}
+	liveIDs, err := fake.ExistingIDs(ctx)
+	if err != nil {
+		t.Fatalf("ExistingIDs: %v", err)
+	}
+
+	newIDs, err := recreateMissing(ctx, fake, desired, existingIDs, liveIDs)
+	if err != nil {
+		t.Fatalf("recreateMissing: %v", err)
+	}
+
+	if fake.UpsertCalls != 1 {
+		t.Errorf("Kuma Upsert called %d times, want exactly 1 (only the missing host) — recreateMissing must not touch hosts that still exist", fake.UpsertCalls)
+	}
+	if newIDs["a.example.com"] != strconv.FormatInt(id1, 10) {
+		t.Errorf("a.example.com id changed to %q, want unchanged %d", newIDs["a.example.com"], id1)
+	}
+	if newIDs["b.example.com"] == strconv.FormatInt(id2, 10) || newIDs["b.example.com"] == "" {
+		t.Errorf("b.example.com id = %q, want a fresh id (was %d, now deleted)", newIDs["b.example.com"], id2)
+	}
+	if len(fake.Monitors) != 2 {
+		t.Errorf("expected 2 monitors in Kuma after recreation, got %d", len(fake.Monitors))
 	}
 }

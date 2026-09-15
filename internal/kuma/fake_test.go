@@ -2,6 +2,8 @@ package kuma
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -49,5 +51,45 @@ func TestFakeClient_DeleteUnknownIDIsNoop(t *testing.T) {
 	c := NewFakeClient()
 	if err := c.Delete(context.Background(), 999); err != nil {
 		t.Errorf("Delete of unknown id: %v, want nil", err)
+	}
+}
+
+func TestFakeClient_ExistingIDs(t *testing.T) {
+	c := NewFakeClient()
+	ctx := context.Background()
+
+	id1, _ := c.Upsert(ctx, 0, MonitorSpec{Type: TypeHTTP, Name: "a", HTTP: &HTTPSpec{URL: "https://a"}})
+	id2, _ := c.Upsert(ctx, 0, MonitorSpec{Type: TypeHTTP, Name: "b", HTTP: &HTTPSpec{URL: "https://b"}})
+
+	ids, err := c.ExistingIDs(ctx)
+	if err != nil {
+		t.Fatalf("ExistingIDs: %v", err)
+	}
+	if !ids[id1] || !ids[id2] {
+		t.Errorf("ExistingIDs = %v, want both %d and %d present", ids, id1, id2)
+	}
+
+	if err := c.Delete(ctx, id1); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	ids, err = c.ExistingIDs(ctx)
+	if err != nil {
+		t.Fatalf("ExistingIDs after delete: %v", err)
+	}
+	if ids[id1] {
+		t.Errorf("ExistingIDs = %v, want %d absent after delete", ids, id1)
+	}
+	if !ids[id2] {
+		t.Errorf("ExistingIDs = %v, want %d still present", ids, id2)
+	}
+}
+
+func TestFakeClient_ExistingIDsErr(t *testing.T) {
+	c := NewFakeClient()
+	sentinel := fmt.Errorf("boom")
+	c.ExistingIDsErr = sentinel
+
+	if _, err := c.ExistingIDs(context.Background()); !errors.Is(err, sentinel) {
+		t.Errorf("ExistingIDs error = %v, want %v", err, sentinel)
 	}
 }
