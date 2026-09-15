@@ -1,0 +1,33 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - unconvert
+    - misspell
+  # revive is deliberately not enabled: its default ruleset requires a godoc
+  # comment on every exported identifier, which conflicts with this project's
+  # convention of commenting only where the WHY is non-obvious.
+  exclusions:
+    generated: strict
+    paths:
+      - api/v1alpha1/zz_generated.deepcopy.go
+    rules:
+      # Deferred cleanup in tests (`defer k8sClient.Delete(...)`) intentionally
+      # ignores the error — the test has already made its assertions by then.
+      - path: _test\.go$
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - uptime-kuma-operator

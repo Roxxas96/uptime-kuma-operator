@@ -1,0 +1,8 @@
+* text=auto eol=lf
+
+# controller-gen output — re-derived by `make generate`/`make manifests`, never
+# hand-edited. Marking these linguist-generated keeps them collapsed in PR diffs
+# and out of GitHub's language stats.
+api/v1alpha1/zz_generated.deepcopy.go linguist-generated=true
+config/crd/** linguist-generated=true
+charts/*/crds/** linguist-generated=true

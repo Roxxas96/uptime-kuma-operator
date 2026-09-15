@@ -1,0 +1,16 @@
+.git/
+.github/
+.claude/
+bin/
+charts/
+docs/
+test/
+*.md
+LICENSE
+
+# Local dev tool config — irrelevant to the build context.
+.editorconfig
+.gitattributes
+.golangci.yml
+.pre-commit-config.yaml
+mise.toml

@@ -1,0 +1,70 @@
+# Fast, local checks only — `make test` (envtest, Docker-based integration test)
+# belongs in CI, not here. `mise install` pulls pre-commit itself; run
+# `pre-commit install` once per clone to activate the git hook, or
+# `pre-commit run --all-files` to run everything on demand.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '^hack/boilerplate\.go\.txt$'
+      - id: end-of-file-fixer
+        # This file is deliberately a single blank line (see the file itself and
+        # Makefile's `generate` target) — controller-gen prepends its content
+        # verbatim to generated Go files, so a blank line means "no header".
+        # end-of-file-fixer treats an all-whitespace file as needing truncation
+        # to empty, which would fight that on every run.
+        exclude: '^hack/boilerplate\.go\.txt$'
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-yaml
+        # Helm templates contain {{ ... }} template syntax and aren't valid YAML
+        # until rendered — `helm lint` (below) validates the rendered output instead.
+        exclude: '^charts/.*/templates/'
+      - id: check-toml
+      - id: check-json
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: detect-private-key
+
+  - repo: https://github.com/editorconfig-checker/editorconfig-checker.python
+    rev: 3.4.0
+    hooks:
+      - id: editorconfig-checker
+        exclude: '^config/crd/|^charts/.*/crds/'
+
+  - repo: local
+    hooks:
+      - id: go-vet
+        name: go vet ./...
+        entry: go vet ./...
+        language: system
+        pass_filenames: false
+        files: '\.go$'
+
+      - id: golangci-lint
+        name: golangci-lint run (includes gofmt/goimports formatting checks)
+        entry: golangci-lint run
+        language: system
+        pass_filenames: false
+        files: '\.go$'
+
+      - id: govulncheck
+        name: govulncheck (supply-chain vulnerability scan)
+        entry: govulncheck ./...
+        language: system
+        pass_filenames: false
+        files: '(go\.(mod|sum))$'
+
+      - id: helm-lint
+        name: helm lint (uptime-kuma-operator chart)
+        # kuma.url/kuma.existingSecret are `required` in the chart — supply dummy
+        # values so lint exercises the templates instead of failing on the guard.
+        entry: >-
+          bash -c 'helm lint charts/uptime-kuma-operator
+          --set kuma.url=https://kuma.example.com
+          --set kuma.existingSecret=dummy'
+        language: system
+        pass_filenames: false
+        files: '^charts/uptime-kuma-operator/'

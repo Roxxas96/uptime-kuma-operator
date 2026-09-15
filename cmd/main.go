@@ -63,7 +63,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	recorder := mgr.GetEventRecorderFor("uptime-kuma-operator")
+	recorder := mgr.GetEventRecorderFor("uptime-kuma-operator") //nolint:staticcheck // GetEventRecorder returns a different EventRecorder type (events.k8s.io/v1); migrating also needs new RBAC verbs and reconciler field types — tracked as a follow-up, not done here
 
 	if err := (&controller.IngressReconciler{
 		Client: mgr.GetClient(), Kuma: kumaClient, WatchAll: cfg.WatchAll,

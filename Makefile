@@ -41,3 +41,22 @@ controller-gen:
 
 envtest:
 	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.25.1
+
+# Tools below are pinned in mise.toml (`mise install` before first use).
+
+.PHONY: fmt
+fmt:
+	golangci-lint fmt
+
+.PHONY: lint
+lint:
+	go vet ./...
+	golangci-lint run
+
+.PHONY: vuln
+vuln:
+	govulncheck ./...
+
+.PHONY: pre-commit-all
+pre-commit-all:
+	pre-commit run --all-files

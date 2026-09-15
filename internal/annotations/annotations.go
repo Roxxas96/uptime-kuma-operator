@@ -24,7 +24,7 @@ const (
 func ShouldSync(watchAll bool, ann map[string]string) bool {
 	v, ok := ann[Enabled]
 	if watchAll {
-		return !(ok && v == "false")
+		return !ok || v != "false"
 	}
 	return ok && v == "true"
 }
