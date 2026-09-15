@@ -25,7 +25,7 @@ type IngressReconciler struct {
 	Recorder       record.EventRecorder
 	// DriftCheckInterval is how often a reconcile that found nothing to sync
 	// re-checks that Kuma still has what it's supposed to. See sync.go's
-	// allExist/recreateMissing doc comments for why this exists.
+	// specsMatch/reconcileDrift doc comments for why this exists.
 	DriftCheckInterval time.Duration
 }
 
@@ -88,17 +88,18 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// Nothing relevant (rules or override annotations) changed since the
 		// last successful sync — skip the Kuma round-trip. See desiredHash's
 		// doc comment for why this matters. But "skip" must not mean
-		// "forever": verify Kuma still has what we think it has, since a
-		// monitor deleted out-of-band (e.g. manually in the Kuma UI) would
-		// otherwise never be noticed or recreated.
-		liveIDs, err := r.Kuma.ExistingIDs(ctx)
+		// "forever": verify Kuma still has what we think it has, and that
+		// it's still configured the way we want, since a monitor deleted or
+		// edited out-of-band (e.g. manually in the Kuma UI) would otherwise
+		// never be noticed or corrected.
+		liveSpecs, err := r.Kuma.ExistingSpecs(ctx)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		if allExist(existingIDs, liveIDs) {
+		if specsMatch(desired, existingIDs, liveSpecs) {
 			return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 		}
-		newIDs, err := recreateMissing(ctx, r.Kuma, desired, existingIDs, liveIDs)
+		newIDs, err := reconcileDrift(ctx, r.Kuma, desired, existingIDs, liveSpecs)
 		if err != nil {
 			recordSyncFailure(r.Recorder, ing, err)
 			return ctrl.Result{}, err

@@ -89,31 +89,50 @@ func syncMonitors(ctx context.Context, kc kuma.Client, desired []derive.DesiredM
 	return newIDs, nil
 }
 
-// allExist reports whether every ID in existingIDs is present in liveIDs
-// (the current Kuma monitor set from kuma.Client.ExistingIDs). An
-// unparseable ID counts as missing, so a corrupted annotation triggers
-// recreation rather than being silently treated as fine.
-func allExist(existingIDs map[string]string, liveIDs map[int64]bool) bool {
-	for _, idStr := range existingIDs {
+// specsMatch reports whether every host in existingIDs still has a Kuma
+// monitor that both exists and matches the configuration currently desired
+// for it (per kuma.Equivalent), against liveSpecs (the current Kuma
+// monitor set from kuma.Client.ExistingSpecs). An unparseable or missing ID
+// counts as drift, so a corrupted annotation or an out-of-band deletion
+// triggers recreation rather than being silently treated as fine. A host
+// present in existingIDs but no longer in desired is ignored here — the
+// normal sync path handles removal, not this drift check.
+func specsMatch(desired []derive.DesiredMonitor, existingIDs map[string]string, liveSpecs map[int64]kuma.MonitorSpec) bool {
+	byHost := make(map[string]derive.DesiredMonitor, len(desired))
+	for _, dm := range desired {
+		byHost[dm.Host] = dm
+	}
+	for host, idStr := range existingIDs {
+		dm, ok := byHost[host]
+		if !ok {
+			continue
+		}
 		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil || !liveIDs[id] {
+		if err != nil {
+			return false
+		}
+		live, ok := liveSpecs[id]
+		if !ok || !kuma.Equivalent(dm.Spec, live) {
 			return false
 		}
 	}
 	return true
 }
 
-// recreateMissing recreates only the monitors in existingIDs that are
-// absent from liveIDs, leaving every other host's monitor untouched. It
-// returns the updated host -> id map.
+// reconcileDrift corrects only the monitors in existingIDs that have
+// drifted from liveSpecs — either missing entirely (deleted out-of-band)
+// or present with a configuration that no longer matches desired (edited
+// out-of-band) — leaving every other host's monitor untouched. It returns
+// the updated host -> id map.
 //
 // This is deliberately narrower than syncMonitors: it runs on the "nothing
 // changed since the last successful sync" path, where the desired
-// configuration for hosts that DO still exist is already correct — calling
+// configuration for hosts that already match is already correct — calling
 // kuma.Client.Upsert on them anyway would be the exact redundant-editMonitor
-// bug this whole mechanism exists to avoid. Only a host whose monitor
-// genuinely vanished (deleted out-of-band) gets a fresh Upsert(id=0, ...).
-func recreateMissing(ctx context.Context, kc kuma.Client, desired []derive.DesiredMonitor, existingIDs map[string]string, liveIDs map[int64]bool) (map[string]string, error) {
+// bug this whole mechanism exists to avoid. A missing monitor gets a fresh
+// Upsert(id=0, ...); a present-but-drifted one gets Upsert(id=existingID,
+// ...) to correct it in place.
+func reconcileDrift(ctx context.Context, kc kuma.Client, desired []derive.DesiredMonitor, existingIDs map[string]string, liveSpecs map[int64]kuma.MonitorSpec) (map[string]string, error) {
 	byHost := make(map[string]derive.DesiredMonitor, len(desired))
 	for _, dm := range desired {
 		byHost[dm.Host] = dm
@@ -125,15 +144,20 @@ func recreateMissing(ctx context.Context, kc kuma.Client, desired []derive.Desir
 	}
 
 	for host, idStr := range existingIDs {
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err == nil && liveIDs[id] {
-			continue // still exists, nothing to do
-		}
 		dm, ok := byHost[host]
 		if !ok {
 			continue // no longer desired either; the normal sync path handles removal
 		}
-		newID, err := kc.Upsert(ctx, 0, dm.Spec)
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		live, exists := liveSpecs[id]
+		if err == nil && exists && kuma.Equivalent(dm.Spec, live) {
+			continue // still exists and matches, nothing to do
+		}
+		upsertID := id
+		if err != nil || !exists {
+			upsertID = 0 // missing or corrupted id — create fresh
+		}
+		newID, err := kc.Upsert(ctx, upsertID, dm.Spec)
 		if err != nil {
 			return nil, err
 		}

@@ -285,7 +285,7 @@ func TestIngressReconciler_SecondReconcileReusesExistingMonitor(t *testing.T) {
 // of the no-op-reconcile fix above: skipping Kuma when the synced-hash is
 // unchanged must not mean skipping it forever. If a monitor is deleted
 // directly in Kuma (not through the operator), the next reconcile — even
-// with an unchanged Ingress — must notice via ExistingIDs and recreate it,
+// with an unchanged Ingress — must notice via ExistingSpecs and recreate it,
 // since the source (this Ingress) is still present.
 func TestIngressReconciler_RecreatesMonitorDeletedOutOfBand(t *testing.T) {
 	ctx := context.Background()
@@ -362,6 +362,88 @@ func TestIngressReconciler_RecreatesMonitorDeletedOutOfBand(t *testing.T) {
 	if secondIDs["drifted.example.com"] == "" || secondIDs["drifted.example.com"] == firstIDs["drifted.example.com"] {
 		t.Errorf("drifted.example.com id = %q, want a fresh id different from the deleted %q",
 			secondIDs["drifted.example.com"], firstIDs["drifted.example.com"])
+	}
+}
+
+// TestIngressReconciler_CorrectsMonitorConfigDriftedOutOfBand covers the
+// other kind of drift ExistingSpecs exists to catch: the monitor still
+// exists in Kuma, but someone changed its configuration directly (e.g. in
+// the Kuma UI) so it no longer matches what this Ingress derives. The next
+// reconcile — even with an unchanged Ingress — must notice and correct it
+// in place, without touching its Kuma ID or the healthy host.
+func TestIngressReconciler_CorrectsMonitorConfigDriftedOutOfBand(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newIngressReconciler(false)
+
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "config-drifted", Namespace: "default",
+			Annotations: map[string]string{annotations.Enabled: "true"},
+		},
+		Spec: networkingv1.IngressSpec{Rules: []networkingv1.IngressRule{
+			{Host: "healthy.example.com"},
+			{Host: "drifted.example.com"},
+		}},
+	}
+	if err := k8sClient.Create(ctx, ing); err != nil {
+		t.Fatalf("create Ingress: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: ing.Name, Namespace: ing.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, ing)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("first Reconcile: %v", err)
+	}
+	first := &networkingv1.Ingress{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, first); err != nil {
+		t.Fatalf("get after first reconcile: %v", err)
+	}
+	firstIDs, err := annotations.ParseMonitorIDs(first.Annotations)
+	if err != nil {
+		t.Fatalf("ParseMonitorIDs: %v", err)
+	}
+
+	// Simulate someone editing the "drifted" host's monitor directly in
+	// Kuma, out of band — the Ingress itself is untouched.
+	drivenID, err := strconv.ParseInt(firstIDs["drifted.example.com"], 10, 64)
+	if err != nil {
+		t.Fatalf("parse drifted monitor id: %v", err)
+	}
+	fake.Monitors[drivenID] = kuma.MonitorSpec{
+		Type: kuma.TypeHTTP, Name: fake.Monitors[drivenID].Name,
+		HTTP: &kuma.HTTPSpec{URL: "https://changed-by-someone-else.example.com/"},
+	}
+	fake.UpsertCalls = 0 // reset: count only what the second Reconcile does
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("second Reconcile (should correct the drift): %v", err)
+	}
+
+	if fake.UpsertCalls != 1 {
+		t.Errorf("Kuma Upsert called %d times, want exactly 1 (only the drifted host) — the healthy host must not be re-edited", fake.UpsertCalls)
+	}
+
+	second := &networkingv1.Ingress{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, second); err != nil {
+		t.Fatalf("get after second reconcile: %v", err)
+	}
+	secondIDs, err := annotations.ParseMonitorIDs(second.Annotations)
+	if err != nil {
+		t.Fatalf("ParseMonitorIDs: %v", err)
+	}
+	if secondIDs["healthy.example.com"] != firstIDs["healthy.example.com"] {
+		t.Errorf("healthy.example.com id changed from %q to %q — it should have been left untouched",
+			firstIDs["healthy.example.com"], secondIDs["healthy.example.com"])
+	}
+	if secondIDs["drifted.example.com"] != firstIDs["drifted.example.com"] {
+		t.Errorf("drifted.example.com id changed from %q to %q — a config correction must update in place, not recreate",
+			firstIDs["drifted.example.com"], secondIDs["drifted.example.com"])
+	}
+	if got := fake.Monitors[drivenID].HTTP.URL; got != "http://drifted.example.com/" {
+		t.Errorf("corrected URL = %q, want %q (derived from the Ingress rule)", got, "http://drifted.example.com/")
 	}
 }
 

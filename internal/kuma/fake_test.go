@@ -54,42 +54,44 @@ func TestFakeClient_DeleteUnknownIDIsNoop(t *testing.T) {
 	}
 }
 
-func TestFakeClient_ExistingIDs(t *testing.T) {
+func TestFakeClient_ExistingSpecs(t *testing.T) {
 	c := NewFakeClient()
 	ctx := context.Background()
 
-	id1, _ := c.Upsert(ctx, 0, MonitorSpec{Type: TypeHTTP, Name: "a", HTTP: &HTTPSpec{URL: "https://a"}})
-	id2, _ := c.Upsert(ctx, 0, MonitorSpec{Type: TypeHTTP, Name: "b", HTTP: &HTTPSpec{URL: "https://b"}})
+	specA := MonitorSpec{Type: TypeHTTP, Name: "a", HTTP: &HTTPSpec{URL: "https://a"}}
+	specB := MonitorSpec{Type: TypeHTTP, Name: "b", HTTP: &HTTPSpec{URL: "https://b"}}
+	id1, _ := c.Upsert(ctx, 0, specA)
+	id2, _ := c.Upsert(ctx, 0, specB)
 
-	ids, err := c.ExistingIDs(ctx)
+	specs, err := c.ExistingSpecs(ctx)
 	if err != nil {
-		t.Fatalf("ExistingIDs: %v", err)
+		t.Fatalf("ExistingSpecs: %v", err)
 	}
-	if !ids[id1] || !ids[id2] {
-		t.Errorf("ExistingIDs = %v, want both %d and %d present", ids, id1, id2)
+	if specs[id1] != specA || specs[id2] != specB {
+		t.Errorf("ExistingSpecs = %v, want %d=%v and %d=%v", specs, id1, specA, id2, specB)
 	}
 
 	if err := c.Delete(ctx, id1); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	ids, err = c.ExistingIDs(ctx)
+	specs, err = c.ExistingSpecs(ctx)
 	if err != nil {
-		t.Fatalf("ExistingIDs after delete: %v", err)
+		t.Fatalf("ExistingSpecs after delete: %v", err)
 	}
-	if ids[id1] {
-		t.Errorf("ExistingIDs = %v, want %d absent after delete", ids, id1)
+	if _, ok := specs[id1]; ok {
+		t.Errorf("ExistingSpecs = %v, want %d absent after delete", specs, id1)
 	}
-	if !ids[id2] {
-		t.Errorf("ExistingIDs = %v, want %d still present", ids, id2)
+	if specs[id2] != specB {
+		t.Errorf("ExistingSpecs = %v, want %d still present", specs, id2)
 	}
 }
 
-func TestFakeClient_ExistingIDsErr(t *testing.T) {
+func TestFakeClient_ExistingSpecsErr(t *testing.T) {
 	c := NewFakeClient()
 	sentinel := fmt.Errorf("boom")
-	c.ExistingIDsErr = sentinel
+	c.ExistingSpecsErr = sentinel
 
-	if _, err := c.ExistingIDs(context.Background()); !errors.Is(err, sentinel) {
-		t.Errorf("ExistingIDs error = %v, want %v", err, sentinel)
+	if _, err := c.ExistingSpecs(context.Background()); !errors.Is(err, sentinel) {
+		t.Errorf("ExistingSpecs error = %v, want %v", err, sentinel)
 	}
 }

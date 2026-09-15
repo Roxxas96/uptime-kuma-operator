@@ -76,23 +76,29 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
+	desiredSpec := toKumaSpec(mon.Spec)
 	if existingID != 0 && mon.Status.ObservedGeneration == mon.Generation {
-		liveIDs, err := r.Kuma.ExistingIDs(ctx)
+		liveSpecs, err := r.Kuma.ExistingSpecs(ctx)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		if liveIDs[existingID] {
-			// Nothing changed and Kuma still has it — nothing to do, but
-			// check again later in case it's deleted out-of-band.
-			return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
+		if live, ok := liveSpecs[existingID]; ok {
+			if kuma.Equivalent(desiredSpec, live) {
+				// Nothing changed and Kuma still has it configured the way
+				// we want — nothing to do, but check again later in case it's
+				// deleted or edited out-of-band.
+				return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
+			}
+			log.Info("Kuma monitor configuration drifted from desired state, correcting", "monitorID", mon.Status.MonitorID)
+		} else {
+			log.Info("Kuma monitor no longer exists, recreating", "monitorID", mon.Status.MonitorID)
+			existingID = 0 // force a create — the old id is gone, an update would fail
 		}
-		log.Info("Kuma monitor no longer exists, recreating", "monitorID", mon.Status.MonitorID)
-		existingID = 0 // force a create — the old id is gone, an update would fail
 	}
 
 	generationToSync := mon.Generation
 
-	newID, err := r.Kuma.Upsert(ctx, existingID, toKumaSpec(mon.Spec))
+	newID, err := r.Kuma.Upsert(ctx, existingID, desiredSpec)
 	if err != nil {
 		if uerr := r.updateStatus(ctx, mon, "", 0, metav1.ConditionFalse, "SyncFailed", err.Error()); uerr != nil {
 			log.Error(uerr, "unable to record SyncFailed status on Monitor")
