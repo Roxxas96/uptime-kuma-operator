@@ -1,0 +1,17 @@
+[tools]
+go = "1.27.1"
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
+golangci-lint = "latest"
+helm = "latest"
+kubectl = "latest"
+kind = "latest"
+"pre-commit" = "latest"
+
+[settings]
+experimental = true
+
+# `mise install` pulls every tool above at the pinned version — run it once after
+# cloning. controller-gen and setup-envtest are intentionally not here: the Makefile
+# installs them itself (`make controller-gen` / `make envtest`) pinned to the exact
+# versions CRD/deepcopy generation and envtest depend on, so there's one place those
+# two version pins live.

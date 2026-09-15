@@ -1,0 +1,38 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# gofmt is the actual authority on Go formatting (tabs, no configurable width) —
+# this just keeps editors from fighting it before gofmt/goimports run.
+[*.go]
+indent_style = tab
+indent_size = 4
+
+[Makefile]
+indent_style = tab
+
+# Generated CRD/deepcopy files are re-derived by `make manifests`/`make generate`,
+# not hand-edited — excluded from the pre-commit editorconfig-checker hook too.
+[{api/v1alpha1/zz_generated.deepcopy.go,config/crd/**,charts/*/crds/**}]
+indent_style = unset
+indent_size = unset
+
+# Verbatim upstream license text (Apache 2.0) — its centered/legal formatting
+# is not ours to reformat.
+[LICENSE]
+indent_style = unset
+indent_size = unset
+
+# Fenced code blocks mix Go (tabs), YAML/Makefile snippets (spaces), and prose —
+# no single indent rule fits a whole markdown file, so leave indent unenforced.
+[*.md]
+trim_trailing_whitespace = false
+indent_style = unset
+indent_size = unset
+max_line_length = off

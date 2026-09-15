@@ -9,6 +9,6 @@ import (
 
 var (
 	GroupVersion  = schema.GroupVersion{Group: "uptime-kuma.io", Version: "v1alpha1"}
-	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
+	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion} //nolint:staticcheck // scheme.Builder is deprecated in favor of hand-rolled AddToScheme; this is the standard kubebuilder scaffold pattern
 	AddToScheme   = SchemeBuilder.AddToScheme
 )
