@@ -15,6 +15,24 @@ type HTTPSpec struct {
 	URL                 string
 	Method              string
 	AcceptedStatusCodes []string
+
+	// Timeout is the request timeout in seconds. 0 = use Kuma default.
+	Timeout int64
+	// MaxRedirects caps how many redirects the check follows. 0 = use Kuma default.
+	MaxRedirects int
+	// IgnoreTLS skips TLS certificate validation.
+	IgnoreTLS bool
+	// CacheBust appends a cache-busting query parameter to the request URL.
+	CacheBust bool
+	// ExpiryNotification enables TLS certificate expiry notifications.
+	ExpiryNotification bool
+	// DomainExpiryNotification enables domain expiry notifications.
+	DomainExpiryNotification bool
+	// Headers is an opaque, unvalidated passthrough to Kuma (the same raw
+	// text the Kuma UI's "Headers" field accepts). "" = unset.
+	Headers string
+	// Body is an opaque, unvalidated passthrough to Kuma. "" = unset.
+	Body string
 }
 
 type TCPSpec struct {
