@@ -60,6 +60,12 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
+	if mon.Status.MonitorID != "" && mon.Status.ObservedGeneration == mon.Generation {
+		// Nothing changed since the last successful sync — skip the Kuma
+		// round-trip. See MonitorStatus.ObservedGeneration's doc comment.
+		return ctrl.Result{}, nil
+	}
+
 	var existingID int64
 	if mon.Status.MonitorID != "" {
 		id, err := strconv.ParseInt(mon.Status.MonitorID, 10, 64)
@@ -71,15 +77,17 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
+	generationToSync := mon.Generation
+
 	newID, err := r.Kuma.Upsert(ctx, existingID, toKumaSpec(mon.Spec))
 	if err != nil {
-		if uerr := r.updateStatus(ctx, mon, "", metav1.ConditionFalse, "SyncFailed", err.Error()); uerr != nil {
+		if uerr := r.updateStatus(ctx, mon, "", 0, metav1.ConditionFalse, "SyncFailed", err.Error()); uerr != nil {
 			log.Error(uerr, "unable to record SyncFailed status on Monitor")
 		}
 		return ctrl.Result{}, err
 	}
 
-	if err := r.updateStatus(ctx, mon, strconv.FormatInt(newID, 10), metav1.ConditionTrue, "Synced", "monitor synced to Kuma"); err != nil {
+	if err := r.updateStatus(ctx, mon, strconv.FormatInt(newID, 10), generationToSync, metav1.ConditionTrue, "Synced", "monitor synced to Kuma"); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -98,6 +106,7 @@ func (r *MonitorReconciler) updateStatus(
 	ctx context.Context,
 	mon *uptimekumaiov1alpha1.Monitor,
 	monitorID string,
+	observedGeneration int64,
 	status metav1.ConditionStatus,
 	reason, message string,
 ) error {
@@ -110,6 +119,10 @@ func (r *MonitorReconciler) updateStatus(
 		changed := false
 		if monitorID != "" && mon.Status.MonitorID != monitorID {
 			mon.Status.MonitorID = monitorID
+			changed = true
+		}
+		if observedGeneration != 0 && mon.Status.ObservedGeneration != observedGeneration {
+			mon.Status.ObservedGeneration = observedGeneration
 			changed = true
 		}
 		if meta.SetStatusCondition(&mon.Status.Conditions, metav1.Condition{

@@ -81,6 +81,66 @@ func TestHTTPRouteReconciler_DefaultMode_SyncsWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestHTTPRouteReconciler_SecondReconcileReusesExistingMonitor(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newHTTPRouteReconciler(false)
+
+	route := &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "idempotent", Namespace: "default",
+			Annotations: map[string]string{annotations.Enabled: "true"},
+		},
+		Spec: gatewayv1.HTTPRouteSpec{Hostnames: []gatewayv1.Hostname{"app.example.com"}},
+	}
+	if err := k8sClient.Create(ctx, route); err != nil {
+		t.Fatalf("create HTTPRoute: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: route.Name, Namespace: route.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, route)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("first Reconcile: %v", err)
+	}
+	first := &gatewayv1.HTTPRoute{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, first); err != nil {
+		t.Fatalf("get HTTPRoute after first reconcile: %v", err)
+	}
+	firstIDs, err := annotations.ParseMonitorIDs(first.Annotations)
+	if err != nil {
+		t.Fatalf("ParseMonitorIDs: %v", err)
+	}
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("second Reconcile: %v", err)
+	}
+	if len(fake.Monitors) != 1 {
+		t.Fatalf("expected the existing monitor to be reused, got %d monitors in Kuma", len(fake.Monitors))
+	}
+
+	// See the identical assertion in TestIngressReconciler_SecondReconcileReusesExistingMonitor
+	// for why this matters: kuma.Client.Upsert (editMonitor) restarts the
+	// monitor's check timer even on an unchanged payload, so it must not be
+	// called on a reconcile where nothing about the desired spec changed.
+	if fake.UpsertCalls != 1 {
+		t.Errorf("Kuma Upsert called %d times across two identical reconciles, want 1 — a no-op reconcile must not re-sync an unchanged monitor", fake.UpsertCalls)
+	}
+
+	second := &gatewayv1.HTTPRoute{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, second); err != nil {
+		t.Fatalf("get HTTPRoute after second reconcile: %v", err)
+	}
+	secondIDs, err := annotations.ParseMonitorIDs(second.Annotations)
+	if err != nil {
+		t.Fatalf("ParseMonitorIDs: %v", err)
+	}
+	if firstIDs["app.example.com"] == "" || firstIDs["app.example.com"] != secondIDs["app.example.com"] {
+		t.Errorf("monitor id changed across reconciles: %v -> %v", firstIDs, secondIDs)
+	}
+}
+
 func TestHTTPRouteReconciler_OptOutDeletesExistingMonitor(t *testing.T) {
 	ctx := context.Background()
 	r, fake := newHTTPRouteReconciler(true)

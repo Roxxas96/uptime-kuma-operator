@@ -251,6 +251,20 @@ func TestIngressReconciler_SecondReconcileReusesExistingMonitor(t *testing.T) {
 		t.Fatalf("expected the existing monitor to be reused, got %d monitors in Kuma", len(fake.Monitors))
 	}
 
+	// The real bug this guards against: a Kuma monitor stuck showing only
+	// ever having completed one check. kuma.Client.Upsert (editMonitor)
+	// restarts the monitor's check timer on Kuma's side even when nothing
+	// about its configuration changed — so calling it on every reconcile,
+	// rather than only when the desired spec actually changed, means a
+	// resource reconciled more often than its check interval (unrelated
+	// annotation churn, an informer resync, anything) never lets the
+	// monitor complete more than one cycle. len(fake.Monitors) alone can't
+	// catch this: Upsert with a nonzero id overwrites the same map key
+	// whether it's called once or a hundred times.
+	if fake.UpsertCalls != 1 {
+		t.Errorf("Kuma Upsert called %d times across two identical reconciles, want 1 — a no-op reconcile must not re-sync an unchanged monitor", fake.UpsertCalls)
+	}
+
 	second := &networkingv1.Ingress{}
 	if err := k8sClient.Get(ctx, req.NamespacedName, second); err != nil {
 		t.Fatalf("get Ingress after second reconcile: %v", err)

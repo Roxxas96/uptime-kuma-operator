@@ -16,6 +16,7 @@ const (
 	MaxRetries          = "uptime-kuma.io/max-retries"
 	AcceptedStatusCodes = "uptime-kuma.io/accepted-statuscodes"
 	MonitorIDs          = "uptime-kuma.io/monitor-ids"
+	SyncedHash          = "uptime-kuma.io/synced-hash"
 	Finalizer           = "uptime-kuma.io/finalizer"
 )
 
@@ -108,5 +109,24 @@ func SetMonitorIDs(ann map[string]string, ids map[string]string) map[string]stri
 	}
 	b, _ := json.Marshal(ids) // map[string]string always marshals cleanly
 	ann[MonitorIDs] = string(b)
+	return ann
+}
+
+// ParseSyncedHash returns the operator-written SyncedHash annotation
+// (a fingerprint of the desired monitor set as of the last successful
+// sync), or "" if absent.
+func ParseSyncedHash(ann map[string]string) string {
+	return ann[SyncedHash]
+}
+
+// SetSyncedHash sets hash into ann under SyncedHash, removing the
+// annotation entirely if hash is empty. It returns ann for convenient
+// chaining; ann must be non-nil.
+func SetSyncedHash(ann map[string]string, hash string) map[string]string {
+	if hash == "" {
+		delete(ann, SyncedHash)
+		return ann
+	}
+	ann[SyncedHash] = hash
 	return ann
 }
