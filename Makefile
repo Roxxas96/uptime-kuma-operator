@@ -23,7 +23,7 @@ envtest-bin: envtest
 	$(LOCALBIN)/setup-envtest use -p path 1.31.x
 
 .PHONY: test
-test: manifests generate gateway-api-crds
+test: manifests generate gateway-api-crds envtest
 	KUBEBUILDER_ASSETS="$$($(LOCALBIN)/setup-envtest use -p path 1.31.x)" go test ./... -count=1
 
 .PHONY: build
