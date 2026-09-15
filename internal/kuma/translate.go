@@ -138,7 +138,7 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 // FromBremlMonitor converts a monitor fetched from Kuma back into the
 // operator's own MonitorSpec representation, for drift comparison against
 // desired configuration via Equivalent. It populates only the fields
-// ToBremlMonitor sets — tags, notifications, description, active state,
+// ToBremlMonitor sets — tags, notifications, active state,
 // and every other Kuma-side field are left for the user to manage directly
 // in Kuma and are never compared or overwritten by the operator.
 func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
@@ -199,12 +199,13 @@ func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 
 // Equivalent reports whether desired and live describe the same monitor
 // configuration, considering only the fields the operator manages (Name,
-// Interval, RetryInterval, MaxRetries, and the type-specific fields) — not
-// every field Kuma tracks (tags, notifications, description, active state,
-// etc. are left for the user to manage directly in Kuma). Both sides are
-// normalized first, so a spec that leaves optional fields unset still
-// compares equal to one that spells out the same default explicitly —
-// which is what Kuma's live spec always does, never leaving a field unset.
+// Interval, RetryInterval, MaxRetries, Description, ResendInterval, UpsideDown,
+// and the type-specific fields) — not every field Kuma tracks (tags,
+// notifications, active state, etc. are left for the user to manage directly
+// in Kuma). Both sides are normalized first, so a spec that leaves optional
+// fields unset still compares equal to one that spells out the same default
+// explicitly — which is what Kuma's live spec always does, never leaving a
+// field unset.
 func Equivalent(desired, live MonitorSpec) bool {
 	d := normalizeSpec(desired)
 	live = normalizeSpec(live)
