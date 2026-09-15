@@ -63,8 +63,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	recorder := mgr.GetEventRecorderFor("uptime-kuma-operator")
+
 	if err := (&controller.IngressReconciler{
 		Client: mgr.GetClient(), Kuma: kumaClient, WatchAll: cfg.WatchAll,
+		Recorder: recorder,
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create Ingress controller")
 		os.Exit(1)
@@ -81,6 +84,7 @@ func main() {
 		utilruntime.Must(gatewayv1.Install(scheme))
 		if err := (&controller.HTTPRouteReconciler{
 			Client: mgr.GetClient(), Kuma: kumaClient, WatchAll: cfg.WatchAll,
+			Recorder: recorder,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create HTTPRoute controller")
 			os.Exit(1)

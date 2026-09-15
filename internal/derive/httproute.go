@@ -9,18 +9,27 @@ import (
 	"uptime-kuma-operator/internal/kuma"
 )
 
-// HTTPRouteMonitors derives one DesiredMonitor per hostname in
-// route.Spec.Hostnames. Scheme defaults to "https" (HTTPRoute carries no
-// TLS info of its own — see design spec); ov.Scheme overrides it.
+// HTTPRouteMonitors derives one DesiredMonitor per distinct, non-empty
+// hostname in route.Spec.Hostnames. Scheme defaults to "https" (HTTPRoute
+// carries no TLS info of its own — see design spec); ov.Scheme overrides it.
 func HTTPRouteMonitors(route *gatewayv1.HTTPRoute, ov annotations.Overrides) []DesiredMonitor {
 	scheme := "https"
 	if ov.Scheme != "" {
 		scheme = ov.Scheme
 	}
 
+	// The Gateway API schema does not enforce uniqueness of spec.hostnames, so
+	// dedupe here: a repeated host would otherwise be upserted twice per
+	// reconcile, and since only one entry survives in the host -> id map the
+	// extra Kuma monitor would be leaked on every pass.
+	seen := map[string]bool{}
 	var out []DesiredMonitor
 	for _, hostname := range route.Spec.Hostnames {
 		host := string(hostname)
+		if host == "" || seen[host] {
+			continue
+		}
+		seen[host] = true
 
 		name := ov.Name
 		if name == "" {

@@ -6,7 +6,9 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"uptime-kuma-operator/internal/annotations"
@@ -15,7 +17,12 @@ import (
 
 func newHTTPRouteReconciler(watchAll bool) (*HTTPRouteReconciler, *kuma.FakeClient) {
 	fake := kuma.NewFakeClient()
-	return &HTTPRouteReconciler{Client: k8sClient, Kuma: fake, WatchAll: watchAll}, fake
+	return &HTTPRouteReconciler{
+		Client:   k8sClient,
+		Kuma:     fake,
+		WatchAll: watchAll,
+		Recorder: record.NewFakeRecorder(16),
+	}, fake
 }
 
 func TestHTTPRouteReconciler_DefaultMode_SkipsWithoutAnnotation(t *testing.T) {
@@ -117,6 +124,19 @@ func TestHTTPRouteReconciler_OptOutDeletesExistingMonitor(t *testing.T) {
 	}
 	if len(fake.Monitors) != 0 {
 		t.Errorf("expected monitor deleted after opt-out, got %d remaining", len(fake.Monitors))
+	}
+
+	// Opting out must also release our finalizer; otherwise the resource can
+	// never be deleted once the operator is uninstalled.
+	optedOut := &gatewayv1.HTTPRoute{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, optedOut); err != nil {
+		t.Fatalf("get HTTPRoute after opt-out: %v", err)
+	}
+	if controllerutil.ContainsFinalizer(optedOut, annotations.Finalizer) {
+		t.Errorf("finalizer %q still present after opt-out", annotations.Finalizer)
+	}
+	if _, ok := optedOut.Annotations[annotations.MonitorIDs]; ok {
+		t.Errorf("monitor-ids annotation still present after opt-out: %q", optedOut.Annotations[annotations.MonitorIDs])
 	}
 }
 

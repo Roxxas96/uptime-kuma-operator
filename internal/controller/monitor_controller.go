@@ -5,10 +5,13 @@ import (
 	"strconv"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	uptimekumaiov1alpha1 "uptime-kuma-operator/api/v1alpha1"
 	"uptime-kuma-operator/internal/annotations"
@@ -21,6 +24,8 @@ type MonitorReconciler struct {
 }
 
 func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
 	mon := &uptimekumaiov1alpha1.Monitor{}
 	if err := r.Client.Get(ctx, req.NamespacedName, mon); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -32,10 +37,11 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if !mon.DeletionTimestamp.IsZero() {
 		if mon.Status.MonitorID != "" {
 			id, err := strconv.ParseInt(mon.Status.MonitorID, 10, 64)
-			if err == nil {
-				if err := r.Kuma.Delete(ctx, id); err != nil {
-					return ctrl.Result{}, err
-				}
+			if err != nil {
+				log.Error(err, "status.monitorID is not an integer, skipping Kuma delete",
+					"monitorID", mon.Status.MonitorID)
+			} else if err := r.Kuma.Delete(ctx, id); err != nil {
+				return ctrl.Result{}, err
 			}
 		}
 		if controllerutil.ContainsFinalizer(mon, annotations.Finalizer) {
@@ -56,40 +62,69 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	var existingID int64
 	if mon.Status.MonitorID != "" {
-		existingID, _ = strconv.ParseInt(mon.Status.MonitorID, 10, 64)
+		id, err := strconv.ParseInt(mon.Status.MonitorID, 10, 64)
+		if err != nil {
+			log.Error(err, "status.monitorID is not an integer, creating a new monitor",
+				"monitorID", mon.Status.MonitorID)
+		} else {
+			existingID = id
+		}
 	}
 
 	newID, err := r.Kuma.Upsert(ctx, existingID, toKumaSpec(mon.Spec))
 	if err != nil {
-		mon.Status.Conditions = setReadyCondition(mon.Status.Conditions, metav1.ConditionFalse, "SyncFailed", err.Error())
-		_ = r.Client.Status().Update(ctx, mon)
+		if uerr := r.updateStatus(ctx, mon, "", metav1.ConditionFalse, "SyncFailed", err.Error()); uerr != nil {
+			log.Error(uerr, "unable to record SyncFailed status on Monitor")
+		}
 		return ctrl.Result{}, err
 	}
 
-	mon.Status.MonitorID = strconv.FormatInt(newID, 10)
-	mon.Status.Conditions = setReadyCondition(mon.Status.Conditions, metav1.ConditionTrue, "Synced", "monitor synced to Kuma")
-	if err := r.Client.Status().Update(ctx, mon); err != nil {
+	if err := r.updateStatus(ctx, mon, strconv.FormatInt(newID, 10), metav1.ConditionTrue, "Synced", "monitor synced to Kuma"); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func setReadyCondition(conditions []metav1.Condition, status metav1.ConditionStatus, reason, message string) []metav1.Condition {
-	cond := metav1.Condition{
-		Type:               "Ready",
-		Status:             status,
-		Reason:             reason,
-		Message:            message,
-		LastTransitionTime: metav1.Now(),
-	}
-	for i, c := range conditions {
-		if c.Type == "Ready" {
-			conditions[i] = cond
-			return conditions
+// updateStatus applies the Kuma monitor ID (when non-empty) and the Ready
+// condition to mon's status, retrying on conflict.
+//
+// It writes only when something actually changed. Without that guard every
+// reconcile would bump resourceVersion, which fires a fresh watch event, which
+// reconciles again — an endless loop with a live Kuma round-trip per pass.
+// meta.SetStatusCondition keeps LastTransitionTime stable while Status is
+// unchanged, which is what makes "nothing changed" detectable at all.
+func (r *MonitorReconciler) updateStatus(
+	ctx context.Context,
+	mon *uptimekumaiov1alpha1.Monitor,
+	monitorID string,
+	status metav1.ConditionStatus,
+	reason, message string,
+) error {
+	key := client.ObjectKeyFromObject(mon)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := r.Client.Get(ctx, key, mon); err != nil {
+			return err
 		}
-	}
-	return append(conditions, cond)
+
+		changed := false
+		if monitorID != "" && mon.Status.MonitorID != monitorID {
+			mon.Status.MonitorID = monitorID
+			changed = true
+		}
+		if meta.SetStatusCondition(&mon.Status.Conditions, metav1.Condition{
+			Type:    "Ready",
+			Status:  status,
+			Reason:  reason,
+			Message: message,
+		}) {
+			changed = true
+		}
+		if !changed {
+			return nil
+		}
+		return r.Client.Status().Update(ctx, mon)
+	})
 }
 
 func (r *MonitorReconciler) SetupWithManager(mgr ctrl.Manager) error {
