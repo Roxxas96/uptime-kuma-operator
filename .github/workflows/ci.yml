@@ -14,6 +14,8 @@ jobs:
   # checks — same checks that run locally via `pre-commit install` /
   # `make pre-commit-all`, so there's exactly one place these rules live.
   lint:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -21,6 +23,8 @@ jobs:
       - uses: pre-commit/action@v3.0.1
 
   test:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -28,6 +32,8 @@ jobs:
       - run: make test
 
   build:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
