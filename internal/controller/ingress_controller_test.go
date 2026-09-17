@@ -517,7 +517,7 @@ func TestIngressReconciler_SyncsPhase1Overrides(t *testing.T) {
 		t.Errorf("Description = %q, want %q", spec.Description, "a friendly description")
 	}
 	if spec.HTTP == nil || !spec.HTTP.IgnoreTLS {
-		t.Errorf("HTTP.IgnoreTLS = %v, want true", spec.HTTP)
+		t.Fatalf("HTTP.IgnoreTLS = %v, want true", spec.HTTP)
 	}
 	if spec.HTTP.URL != "http://app.example.com/healthz" {
 		t.Errorf("URL = %q, want %q", spec.HTTP.URL, "http://app.example.com/healthz")
