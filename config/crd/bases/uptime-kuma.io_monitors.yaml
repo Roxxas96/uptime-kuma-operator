@@ -87,6 +87,32 @@ spec:
                   port:
                     format: int32
                     type: integer
+                  tokenSecretRef:
+                    description: |-
+                      TokenSecretRef selects an optional auth token Secret key. The Secret
+                      must be in the same namespace as this resource.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
                 required:
                 - game
                 - host
@@ -103,6 +129,73 @@ spec:
                     items:
                       type: string
                     type: array
+                  authMethod:
+                    description: |-
+                      AuthMethod selects the HTTP auth scheme: "" (none), "basic", "bearer",
+                      or "oauth2-cc". NTLM and mTLS are not supported.
+                    enum:
+                    - ""
+                    - basic
+                    - bearer
+                    - oauth2-cc
+                    type: string
+                  basicAuthPasswordSecretRef:
+                    description: |-
+                      BasicAuthPasswordSecretRef selects the password Secret key when
+                      authMethod is "basic". The Secret must be in the same namespace as
+                      this resource.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  basicAuthUsername:
+                    description: BasicAuthUsername is used when authMethod is "basic".
+                      Not secret.
+                    type: string
+                  bearerTokenSecretRef:
+                    description: |-
+                      BearerTokenSecretRef selects the token Secret key when authMethod is
+                      "bearer". The Secret must be in the same namespace as this resource.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
                   body:
                     description: Body is an opaque, unvalidated passthrough to Kuma.
                     type: string
@@ -129,6 +222,43 @@ spec:
                     format: int32
                     type: integer
                   method:
+                    type: string
+                  oauthAudience:
+                    type: string
+                  oauthClientID:
+                    description: OAuthClientID is used when authMethod is "oauth2-cc".
+                      Not secret.
+                    type: string
+                  oauthClientSecretRef:
+                    description: |-
+                      OAuthClientSecretRef selects the client secret Secret key when
+                      authMethod is "oauth2-cc". The Secret must be in the same namespace
+                      as this resource.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  oauthScopes:
+                    type: string
+                  oauthTokenURL:
                     type: string
                   timeout:
                     description: Timeout is the request timeout in seconds.

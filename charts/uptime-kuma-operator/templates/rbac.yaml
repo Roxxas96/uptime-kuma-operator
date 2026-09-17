@@ -5,6 +5,7 @@
   (dict "apiGroups" (list "uptime-kuma.io") "resources" (list "monitors/status") "verbs" (list "get" "update" "patch"))
   (dict "apiGroups" (list "uptime-kuma.io") "resources" (list "monitors/finalizers") "verbs" (list "update"))
   (dict "apiGroups" (list "") "resources" (list "events") "verbs" (list "create" "patch"))
+  (dict "apiGroups" (list "") "resources" (list "secrets") "verbs" (list "get" "list" "watch"))
 -}}
 {{- if .Values.watchAll }}
 apiVersion: rbac.authorization.k8s.io/v1
