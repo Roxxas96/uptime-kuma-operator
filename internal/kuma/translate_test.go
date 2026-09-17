@@ -387,3 +387,43 @@ func TestEquivalent_DetectsDrift_PingAndDNSFields(t *testing.T) {
 		t.Error("Equivalent(baseDNS, changedDNSExpiry) = true, want false")
 	}
 }
+
+func TestFromBremlMonitor_RoundTripsThroughToBremlMonitor_GamedigFields(t *testing.T) {
+	spec := MonitorSpec{
+		Type: TypeGamedig, Name: "game-server",
+		Gamedig: &GamedigSpec{
+			Host: "game.example.com", Port: 27015, Game: "csgo",
+			GivenPortOnly: true, DomainExpiryNotification: true,
+		},
+	}
+
+	mon, err := ToBremlMonitor(7, spec)
+	if err != nil {
+		t.Fatalf("ToBremlMonitor: %v", err)
+	}
+	data, err := json.Marshal(mon)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var base bremlmonitor.Base
+	if err := json.Unmarshal(data, &base); err != nil {
+		t.Fatalf("unmarshal into Base: %v", err)
+	}
+
+	got, err := FromBremlMonitor(base)
+	if err != nil {
+		t.Fatalf("FromBremlMonitor: %v", err)
+	}
+	if !Equivalent(spec, got) {
+		t.Errorf("FromBremlMonitor(round-tripped ToBremlMonitor(%+v)) = %+v, want an equivalent spec", spec, got)
+	}
+}
+
+func TestEquivalent_DetectsDrift_GamedigFields(t *testing.T) {
+	base := MonitorSpec{Type: TypeGamedig, Name: "game-server", Gamedig: &GamedigSpec{Host: "game.example.com", Port: 27015, Game: "csgo"}}
+	changedGivenPortOnly := base
+	changedGivenPortOnly.Gamedig = &GamedigSpec{Host: "game.example.com", Port: 27015, Game: "csgo", GivenPortOnly: true}
+	if Equivalent(base, changedGivenPortOnly) {
+		t.Error("Equivalent(base, changedGivenPortOnly) = true, want false")
+	}
+}
