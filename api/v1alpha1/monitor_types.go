@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -37,6 +38,28 @@ type HTTPMonitorSpec struct {
 	Headers string `json:"headers,omitempty"`
 	// Body is an opaque, unvalidated passthrough to Kuma.
 	Body string `json:"body,omitempty"`
+	// AuthMethod selects the HTTP auth scheme: "" (none), "basic", "bearer",
+	// or "oauth2-cc". NTLM and mTLS are not supported.
+	// +kubebuilder:validation:Enum="";basic;bearer;oauth2-cc
+	AuthMethod string `json:"authMethod,omitempty"`
+	// BasicAuthUsername is used when authMethod is "basic". Not secret.
+	BasicAuthUsername string `json:"basicAuthUsername,omitempty"`
+	// BasicAuthPasswordSecretRef selects the password Secret key when
+	// authMethod is "basic". The Secret must be in the same namespace as
+	// this resource.
+	BasicAuthPasswordSecretRef *corev1.SecretKeySelector `json:"basicAuthPasswordSecretRef,omitempty"`
+	// BearerTokenSecretRef selects the token Secret key when authMethod is
+	// "bearer". The Secret must be in the same namespace as this resource.
+	BearerTokenSecretRef *corev1.SecretKeySelector `json:"bearerTokenSecretRef,omitempty"`
+	// OAuthClientID is used when authMethod is "oauth2-cc". Not secret.
+	OAuthClientID string `json:"oauthClientID,omitempty"`
+	// OAuthClientSecretRef selects the client secret Secret key when
+	// authMethod is "oauth2-cc". The Secret must be in the same namespace
+	// as this resource.
+	OAuthClientSecretRef *corev1.SecretKeySelector `json:"oauthClientSecretRef,omitempty"`
+	OAuthTokenURL        string                    `json:"oauthTokenURL,omitempty"`
+	OAuthScopes          string                    `json:"oauthScopes,omitempty"`
+	OAuthAudience        string                    `json:"oauthAudience,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
@@ -93,6 +116,9 @@ type GamedigMonitorSpec struct {
 	GivenPortOnly bool `json:"givenPortOnly,omitempty"`
 	// DomainExpiryNotification enables domain expiry notifications.
 	DomainExpiryNotification bool `json:"domainExpiryNotification,omitempty"`
+	// TokenSecretRef selects an optional auth token Secret key. The Secret
+	// must be in the same namespace as this resource.
+	TokenSecretRef *corev1.SecretKeySelector `json:"tokenSecretRef,omitempty"`
 }
 
 // The first five rules require the sub-struct matching spec.type; the second
