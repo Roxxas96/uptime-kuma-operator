@@ -20,17 +20,54 @@ type HTTPMonitorSpec struct {
 	URL                 string   `json:"url"`
 	Method              string   `json:"method,omitempty"`
 	AcceptedStatusCodes []string `json:"acceptedStatusCodes,omitempty"`
+
+	// Timeout is the request timeout in seconds.
+	Timeout int64 `json:"timeout,omitempty"`
+	// MaxRedirects caps how many redirects the check follows.
+	MaxRedirects int32 `json:"maxRedirects,omitempty"`
+	// IgnoreTLS skips TLS certificate validation.
+	IgnoreTLS bool `json:"ignoreTLS,omitempty"`
+	// CacheBust appends a cache-busting query parameter to the request URL.
+	CacheBust bool `json:"cacheBust,omitempty"`
+	// ExpiryNotification enables TLS certificate expiry notifications.
+	ExpiryNotification bool `json:"expiryNotification,omitempty"`
+	// DomainExpiryNotification enables domain expiry notifications.
+	DomainExpiryNotification bool `json:"domainExpiryNotification,omitempty"`
+	// Headers is an opaque, unvalidated passthrough to Kuma.
+	Headers string `json:"headers,omitempty"`
+	// Body is an opaque, unvalidated passthrough to Kuma.
+	Body string `json:"body,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
 type TCPMonitorSpec struct {
 	Host string `json:"host"`
 	Port int32  `json:"port"`
+
+	// TLSMode selects the TLS handshake mode: "" (plain TCP), "nostarttls",
+	// "secure", or "starttls".
+	// +kubebuilder:validation:Enum=;nostarttls;secure;starttls
+	TLSMode string `json:"tlsMode,omitempty"`
+	// ExpectedSSLAlert is the TLS alert name expected during the handshake
+	// (e.g. for mTLS verification).
+	ExpectedSSLAlert string `json:"expectedSSLAlert,omitempty"`
+	// ExpiryNotification enables TLS certificate expiry notifications. Only
+	// honoured by Kuma when TLSMode is "secure" or "starttls".
+	ExpiryNotification bool `json:"expiryNotification,omitempty"`
+	// DomainExpiryNotification enables domain expiry notifications.
+	DomainExpiryNotification bool `json:"domainExpiryNotification,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
 type PingMonitorSpec struct {
 	Host string `json:"host"`
+
+	// Timeout is the per-ping timeout in seconds.
+	Timeout int64 `json:"timeout,omitempty"`
+	// PacketSize is the ICMP packet size in bytes.
+	PacketSize int32 `json:"packetSize,omitempty"`
+	// DomainExpiryNotification enables domain expiry notifications.
+	DomainExpiryNotification bool `json:"domainExpiryNotification,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
@@ -39,6 +76,9 @@ type DNSMonitorSpec struct {
 	ResolverServer string `json:"resolverServer,omitempty"`
 	ResolveType    string `json:"resolveType,omitempty"`
 	Port           int32  `json:"port,omitempty"`
+
+	// DomainExpiryNotification enables domain expiry notifications.
+	DomainExpiryNotification bool `json:"domainExpiryNotification,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
@@ -46,6 +86,13 @@ type GamedigMonitorSpec struct {
 	Host string `json:"host"`
 	Port int32  `json:"port"`
 	Game string `json:"game"`
+
+	// GivenPortOnly, when true, probes only the given port instead of
+	// letting Kuma guess it. false (default) matches Kuma's "Guess Port"
+	// checked in its UI.
+	GivenPortOnly bool `json:"givenPortOnly,omitempty"`
+	// DomainExpiryNotification enables domain expiry notifications.
+	DomainExpiryNotification bool `json:"domainExpiryNotification,omitempty"`
 }
 
 // The first five rules require the sub-struct matching spec.type; the second
@@ -70,6 +117,15 @@ type MonitorSpec struct {
 	Interval      int64  `json:"interval,omitempty"`
 	Retries       int64  `json:"retries,omitempty"`
 	RetryInterval int64  `json:"retryInterval,omitempty"`
+
+	// Description is shown alongside the monitor in the Kuma UI.
+	Description string `json:"description,omitempty"`
+	// ResendInterval is how many consecutive failed checks pass between
+	// repeated down notifications. 0 disables resending.
+	ResendInterval int64 `json:"resendInterval,omitempty"`
+	// UpsideDown inverts up/down: the monitor reports "up" when the
+	// underlying check fails and "down" when it succeeds.
+	UpsideDown bool `json:"upsideDown,omitempty"`
 
 	HTTP    *HTTPMonitorSpec    `json:"http,omitempty"`
 	TCP     *TCPMonitorSpec     `json:"tcp,omitempty"`

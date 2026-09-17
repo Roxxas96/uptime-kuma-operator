@@ -48,8 +48,15 @@ spec:
               five reject every other sub-struct, so the discriminator is exclusive rather
               than silently ignoring extra configuration.
             properties:
+              description:
+                description: Description is shown alongside the monitor in the Kuma
+                  UI.
+                type: string
               dns:
                 properties:
+                  domainExpiryNotification:
+                    description: DomainExpiryNotification enables domain expiry notifications.
+                    type: boolean
                   host:
                     type: string
                   port:
@@ -64,8 +71,17 @@ spec:
                 type: object
               gamedig:
                 properties:
+                  domainExpiryNotification:
+                    description: DomainExpiryNotification enables domain expiry notifications.
+                    type: boolean
                   game:
                     type: string
+                  givenPortOnly:
+                    description: |-
+                      GivenPortOnly, when true, probes only the given port instead of
+                      letting Kuma guess it. false (default) matches Kuma's "Guess Port"
+                      checked in its UI.
+                    type: boolean
                   host:
                     type: string
                   port:
@@ -82,8 +98,37 @@ spec:
                     items:
                       type: string
                     type: array
+                  body:
+                    description: Body is an opaque, unvalidated passthrough to Kuma.
+                    type: string
+                  cacheBust:
+                    description: CacheBust appends a cache-busting query parameter
+                      to the request URL.
+                    type: boolean
+                  domainExpiryNotification:
+                    description: DomainExpiryNotification enables domain expiry notifications.
+                    type: boolean
+                  expiryNotification:
+                    description: ExpiryNotification enables TLS certificate expiry
+                      notifications.
+                    type: boolean
+                  headers:
+                    description: Headers is an opaque, unvalidated passthrough to
+                      Kuma.
+                    type: string
+                  ignoreTLS:
+                    description: IgnoreTLS skips TLS certificate validation.
+                    type: boolean
+                  maxRedirects:
+                    description: MaxRedirects caps how many redirects the check follows.
+                    format: int32
+                    type: integer
                   method:
                     type: string
+                  timeout:
+                    description: Timeout is the request timeout in seconds.
+                    format: int64
+                    type: integer
                   url:
                     type: string
                 required:
@@ -96,11 +141,28 @@ spec:
                 type: string
               ping:
                 properties:
+                  domainExpiryNotification:
+                    description: DomainExpiryNotification enables domain expiry notifications.
+                    type: boolean
                   host:
                     type: string
+                  packetSize:
+                    description: PacketSize is the ICMP packet size in bytes.
+                    format: int32
+                    type: integer
+                  timeout:
+                    description: Timeout is the per-ping timeout in seconds.
+                    format: int64
+                    type: integer
                 required:
                 - host
                 type: object
+              resendInterval:
+                description: |-
+                  ResendInterval is how many consecutive failed checks pass between
+                  repeated down notifications. 0 disables resending.
+                format: int64
+                type: integer
               retries:
                 format: int64
                 type: integer
@@ -109,11 +171,33 @@ spec:
                 type: integer
               tcp:
                 properties:
+                  domainExpiryNotification:
+                    description: DomainExpiryNotification enables domain expiry notifications.
+                    type: boolean
+                  expectedSSLAlert:
+                    description: |-
+                      ExpectedSSLAlert is the TLS alert name expected during the handshake
+                      (e.g. for mTLS verification).
+                    type: string
+                  expiryNotification:
+                    description: |-
+                      ExpiryNotification enables TLS certificate expiry notifications. Only
+                      honoured by Kuma when TLSMode is "secure" or "starttls".
+                    type: boolean
                   host:
                     type: string
                   port:
                     format: int32
                     type: integer
+                  tlsMode:
+                    description: |-
+                      TLSMode selects the TLS handshake mode: "" (plain TCP), "nostarttls",
+                      "secure", or "starttls".
+                    enum:
+                    - ;nostarttls
+                    - secure
+                    - starttls
+                    type: string
                 required:
                 - host
                 - port
@@ -126,6 +210,11 @@ spec:
                 - DNS
                 - Gamedig
                 type: string
+              upsideDown:
+                description: |-
+                  UpsideDown inverts up/down: the monitor reports "up" when the
+                  underlying check fails and "down" when it succeeds.
+                type: boolean
             required:
             - type
             type: object
