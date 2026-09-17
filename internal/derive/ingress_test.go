@@ -104,3 +104,57 @@ func TestIngressMonitors_SkipsEmptyAndDuplicateHosts(t *testing.T) {
 		t.Fatalf("len(got) = %d, want 1 (empty and duplicate hosts skipped)", len(got))
 	}
 }
+
+func TestIngressMonitors_Phase1OverridesApplied(t *testing.T) {
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "prod", Name: "web"},
+		Spec: networkingv1.IngressSpec{
+			Rules: []networkingv1.IngressRule{{Host: "app.example.com"}},
+		},
+	}
+	ov := annotations.Overrides{
+		Description: "a friendly description", ResendInterval: 3, UpsideDown: true,
+		Timeout: 30, MaxRedirects: 5, IgnoreTLS: true, CacheBust: true,
+		ExpiryNotification: true, DomainExpiryNotification: true,
+		Headers: `{"X-Custom":"value"}`, Body: `{"key":"value"}`,
+	}
+
+	got := IngressMonitors(ing, ov)
+	spec := got[0].Spec
+	if spec.Description != "a friendly description" || spec.ResendInterval != 3 || !spec.UpsideDown {
+		t.Errorf("common fields = %+v, want Phase 1 overrides applied", spec)
+	}
+	if spec.HTTP.Timeout != 30 || spec.HTTP.MaxRedirects != 5 || !spec.HTTP.IgnoreTLS || !spec.HTTP.CacheBust ||
+		!spec.HTTP.ExpiryNotification || !spec.HTTP.DomainExpiryNotification ||
+		spec.HTTP.Headers != `{"X-Custom":"value"}` || spec.HTTP.Body != `{"key":"value"}` {
+		t.Errorf("HTTP fields = %+v, want Phase 1 overrides applied", spec.HTTP)
+	}
+}
+
+func TestIngressMonitors_PathOverride(t *testing.T) {
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "prod", Name: "web"},
+		Spec: networkingv1.IngressSpec{
+			Rules: []networkingv1.IngressRule{{Host: "app.example.com"}},
+		},
+	}
+
+	got := IngressMonitors(ing, annotations.Overrides{Path: "/healthz"})
+	if got[0].Spec.HTTP.URL != "http://app.example.com/healthz" {
+		t.Errorf("URL = %q, want %q", got[0].Spec.HTTP.URL, "http://app.example.com/healthz")
+	}
+}
+
+func TestIngressMonitors_NoPathOverrideDefaultsToSlash(t *testing.T) {
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "prod", Name: "web"},
+		Spec: networkingv1.IngressSpec{
+			Rules: []networkingv1.IngressRule{{Host: "app.example.com"}},
+		},
+	}
+
+	got := IngressMonitors(ing, annotations.Overrides{})
+	if got[0].Spec.HTTP.URL != "http://app.example.com/" {
+		t.Errorf("URL = %q, want %q", got[0].Spec.HTTP.URL, "http://app.example.com/")
+	}
+}

@@ -31,6 +31,11 @@ func HTTPRouteMonitors(route *gatewayv1.HTTPRoute, ov annotations.Overrides) []D
 		}
 		seen[host] = true
 
+		path := "/"
+		if ov.Path != "" {
+			path = ov.Path
+		}
+
 		name := ov.Name
 		if name == "" {
 			name = fmt.Sprintf("%s/%s/%s", route.Namespace, route.Name, host)
@@ -39,14 +44,25 @@ func HTTPRouteMonitors(route *gatewayv1.HTTPRoute, ov annotations.Overrides) []D
 		out = append(out, DesiredMonitor{
 			Host: host,
 			Spec: kuma.MonitorSpec{
-				Type:          kuma.TypeHTTP,
-				Name:          name,
-				Interval:      ov.Interval,
-				RetryInterval: ov.RetryInterval,
-				MaxRetries:    ov.MaxRetries,
+				Type:           kuma.TypeHTTP,
+				Name:           name,
+				Interval:       ov.Interval,
+				RetryInterval:  ov.RetryInterval,
+				MaxRetries:     ov.MaxRetries,
+				Description:    ov.Description,
+				ResendInterval: ov.ResendInterval,
+				UpsideDown:     ov.UpsideDown,
 				HTTP: &kuma.HTTPSpec{
-					URL:                 fmt.Sprintf("%s://%s/", scheme, host),
-					AcceptedStatusCodes: ov.AcceptedStatusCodes,
+					URL:                      fmt.Sprintf("%s://%s%s", scheme, host, path),
+					AcceptedStatusCodes:      ov.AcceptedStatusCodes,
+					Timeout:                  ov.Timeout,
+					MaxRedirects:             int(ov.MaxRedirects),
+					IgnoreTLS:                ov.IgnoreTLS,
+					CacheBust:                ov.CacheBust,
+					ExpiryNotification:       ov.ExpiryNotification,
+					DomainExpiryNotification: ov.DomainExpiryNotification,
+					Headers:                  ov.Headers,
+					Body:                     ov.Body,
 				},
 			},
 		})

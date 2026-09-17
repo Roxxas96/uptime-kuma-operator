@@ -42,6 +42,11 @@ func IngressMonitors(ing *networkingv1.Ingress, ov annotations.Overrides) []Desi
 			scheme = ov.Scheme
 		}
 
+		path := "/"
+		if ov.Path != "" {
+			path = ov.Path
+		}
+
 		name := ov.Name
 		if name == "" {
 			name = fmt.Sprintf("%s/%s/%s", ing.Namespace, ing.Name, rule.Host)
@@ -50,14 +55,25 @@ func IngressMonitors(ing *networkingv1.Ingress, ov annotations.Overrides) []Desi
 		out = append(out, DesiredMonitor{
 			Host: rule.Host,
 			Spec: kuma.MonitorSpec{
-				Type:          kuma.TypeHTTP,
-				Name:          name,
-				Interval:      ov.Interval,
-				RetryInterval: ov.RetryInterval,
-				MaxRetries:    ov.MaxRetries,
+				Type:           kuma.TypeHTTP,
+				Name:           name,
+				Interval:       ov.Interval,
+				RetryInterval:  ov.RetryInterval,
+				MaxRetries:     ov.MaxRetries,
+				Description:    ov.Description,
+				ResendInterval: ov.ResendInterval,
+				UpsideDown:     ov.UpsideDown,
 				HTTP: &kuma.HTTPSpec{
-					URL:                 fmt.Sprintf("%s://%s/", scheme, rule.Host),
-					AcceptedStatusCodes: ov.AcceptedStatusCodes,
+					URL:                      fmt.Sprintf("%s://%s%s", scheme, rule.Host, path),
+					AcceptedStatusCodes:      ov.AcceptedStatusCodes,
+					Timeout:                  ov.Timeout,
+					MaxRedirects:             int(ov.MaxRedirects),
+					IgnoreTLS:                ov.IgnoreTLS,
+					CacheBust:                ov.CacheBust,
+					ExpiryNotification:       ov.ExpiryNotification,
+					DomainExpiryNotification: ov.DomainExpiryNotification,
+					Headers:                  ov.Headers,
+					Body:                     ov.Body,
 				},
 			},
 		})
