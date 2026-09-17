@@ -10,3 +10,22 @@ spec:
     host: game.example.com
     port: 27015
     game: csgo
+---
+apiVersion: uptime-kuma.io/v1alpha1
+kind: Monitor
+metadata:
+  name: http-sample
+spec:
+  type: HTTP
+  name: "Sample HTTP Monitor"
+  interval: 60
+  description: "Example showing Phase 1 fields"
+  resendInterval: 3
+  http:
+    url: https://example.com/health
+    timeout: 30
+    maxRedirects: 5
+    ignoreTLS: false
+    cacheBust: false
+    expiryNotification: true
+    domainExpiryNotification: true

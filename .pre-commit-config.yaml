@@ -21,6 +21,8 @@ repos:
       - id: check-yaml
         # Helm templates contain {{ ... }} template syntax and aren't valid YAML
         # until rendered — `helm lint` (below) validates the rendered output instead.
+        # --unsafe allows multi-document YAML files (e.g., config/samples/ with `---` separators).
+        args: [--unsafe]
         exclude: '^charts/.*/templates/'
       - id: check-toml
       - id: check-json
