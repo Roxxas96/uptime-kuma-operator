@@ -2,7 +2,7 @@ package kuma
 
 import (
 	"fmt"
-	"slices"
+	"reflect"
 
 	bremlmonitor "github.com/breml/go-uptime-kuma-client/monitor"
 )
@@ -92,17 +92,19 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 		if spec.TCP == nil {
 			return nil, fmt.Errorf("kuma: monitor type %s requires the TCP field to be set", TypeTCP)
 		}
+		tlsMode := spec.TCP.TLSMode
+		expectedAlert := spec.TCP.ExpectedSSLAlert
 		details := bremlmonitor.TCPPortDetails{
 			Hostname:                 spec.TCP.Host,
 			Port:                     spec.TCP.Port,
 			ExpiryNotification:       spec.TCP.ExpiryNotification,
 			DomainExpiryNotification: spec.TCP.DomainExpiryNotification,
 		}
-		if spec.TCP.TLSMode != "" {
-			details.SMTPSecurity = &spec.TCP.TLSMode
+		if tlsMode != "" {
+			details.SMTPSecurity = &tlsMode
 		}
-		if spec.TCP.ExpectedSSLAlert != "" {
-			details.ExpectedTLSAlert = &spec.TCP.ExpectedSSLAlert
+		if expectedAlert != "" {
+			details.ExpectedTLSAlert = &expectedAlert
 		}
 		return &bremlmonitor.TCPPort{Base: base, TCPPortDetails: details}, nil
 
@@ -110,13 +112,14 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 		if spec.Ping == nil {
 			return nil, fmt.Errorf("kuma: monitor type %s requires the Ping field to be set", TypePing)
 		}
+		timeout := spec.Ping.Timeout
 		details := bremlmonitor.PingDetails{
 			Hostname:                 spec.Ping.Host,
 			PacketSize:               spec.Ping.PacketSize,
 			DomainExpiryNotification: spec.Ping.DomainExpiryNotification,
 		}
-		if spec.Ping.Timeout != 0 {
-			details.Timeout = &spec.Ping.Timeout
+		if timeout != 0 {
+			details.Timeout = &timeout
 		}
 		return &bremlmonitor.Ping{Base: base, PingDetails: details}, nil
 
@@ -264,18 +267,12 @@ func Equivalent(desired, live MonitorSpec) bool {
 	}
 	switch d.Type {
 	case TypeHTTP:
-		return d.HTTP != nil && live.HTTP != nil &&
-			d.HTTP.URL == live.HTTP.URL &&
-			d.HTTP.Method == live.HTTP.Method &&
-			slices.Equal(d.HTTP.AcceptedStatusCodes, live.HTTP.AcceptedStatusCodes) &&
-			d.HTTP.Timeout == live.HTTP.Timeout &&
-			d.HTTP.MaxRedirects == live.HTTP.MaxRedirects &&
-			d.HTTP.IgnoreTLS == live.HTTP.IgnoreTLS &&
-			d.HTTP.CacheBust == live.HTTP.CacheBust &&
-			d.HTTP.ExpiryNotification == live.HTTP.ExpiryNotification &&
-			d.HTTP.DomainExpiryNotification == live.HTTP.DomainExpiryNotification &&
-			d.HTTP.Headers == live.HTTP.Headers &&
-			d.HTTP.Body == live.HTTP.Body
+		// HTTPSpec contains a slice field (AcceptedStatusCodes), so the
+		// struct type is never comparable with == (a static Go restriction,
+		// regardless of the slice's runtime value) — reflect.DeepEqual is
+		// used instead so a future field added to HTTPSpec is automatically
+		// covered here rather than requiring a hand-maintained && chain.
+		return d.HTTP != nil && live.HTTP != nil && reflect.DeepEqual(*d.HTTP, *live.HTTP)
 	case TypeTCP:
 		return d.TCP != nil && live.TCP != nil && *d.TCP == *live.TCP
 	case TypePing:
