@@ -33,6 +33,25 @@ type HTTPSpec struct {
 	Headers string
 	// Body is an opaque, unvalidated passthrough to Kuma. "" = unset.
 	Body string
+
+	// AuthMethod selects the HTTP auth scheme: "" (none), "basic", "bearer",
+	// or "oauth2-cc" (OAuth2 Client Credentials). NTLM and mTLS are not
+	// supported.
+	AuthMethod string
+	// BasicAuthUsername is not secret; only the password is.
+	BasicAuthUsername string
+	// BasicAuthPassword is an already-resolved secret value — see
+	// api/v1alpha1's SecretKeySelector fields for where it's read from.
+	BasicAuthPassword string
+	// BearerToken is an already-resolved secret value.
+	BearerToken string
+	// OAuthClientID is not secret.
+	OAuthClientID string
+	// OAuthClientSecret is an already-resolved secret value.
+	OAuthClientSecret string
+	OAuthTokenURL     string
+	OAuthScopes       string
+	OAuthAudience     string
 }
 
 type TCPSpec struct {
@@ -84,6 +103,8 @@ type GamedigSpec struct {
 	GivenPortOnly bool
 	// DomainExpiryNotification enables domain expiry notifications.
 	DomainExpiryNotification bool
+	// Token is an already-resolved secret value, or "" for none.
+	Token string
 }
 
 // MonitorSpec is the operator's own monitor representation, shared by the

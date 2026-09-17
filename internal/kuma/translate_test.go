@@ -492,3 +492,71 @@ func TestEquivalent_NotificationIDsOrderIndependent(t *testing.T) {
 		t.Error("Equivalent(a, b) = false, want true — NotificationIDs order must not matter")
 	}
 }
+
+func TestFromBremlMonitor_RoundTripsThroughToBremlMonitor_HTTPAuthFields(t *testing.T) {
+	spec := MonitorSpec{
+		Type: TypeHTTP, Name: "web",
+		HTTP: &HTTPSpec{
+			URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"},
+			AuthMethod: "basic", BasicAuthUsername: "svc-account", BasicAuthPassword: "hunter2",
+		},
+	}
+
+	mon, err := ToBremlMonitor(9, spec)
+	if err != nil {
+		t.Fatalf("ToBremlMonitor: %v", err)
+	}
+	data, err := json.Marshal(mon)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var base bremlmonitor.Base
+	if err := json.Unmarshal(data, &base); err != nil {
+		t.Fatalf("unmarshal into Base: %v", err)
+	}
+
+	got, err := FromBremlMonitor(base)
+	if err != nil {
+		t.Fatalf("FromBremlMonitor: %v", err)
+	}
+	if !Equivalent(spec, got) {
+		t.Errorf("FromBremlMonitor(round-tripped ToBremlMonitor(%+v)) = %+v, want an equivalent spec", spec, got)
+	}
+}
+
+func TestFromBremlMonitor_RoundTripsThroughToBremlMonitor_GamedigToken(t *testing.T) {
+	spec := MonitorSpec{
+		Type: TypeGamedig, Name: "game-server",
+		Gamedig: &GamedigSpec{Host: "game.example.com", Port: 27015, Game: "csgo", Token: "s3cr3t"},
+	}
+
+	mon, err := ToBremlMonitor(9, spec)
+	if err != nil {
+		t.Fatalf("ToBremlMonitor: %v", err)
+	}
+	data, err := json.Marshal(mon)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var base bremlmonitor.Base
+	if err := json.Unmarshal(data, &base); err != nil {
+		t.Fatalf("unmarshal into Base: %v", err)
+	}
+
+	got, err := FromBremlMonitor(base)
+	if err != nil {
+		t.Fatalf("FromBremlMonitor: %v", err)
+	}
+	if !Equivalent(spec, got) {
+		t.Errorf("FromBremlMonitor(round-tripped ToBremlMonitor(%+v)) = %+v, want an equivalent spec", spec, got)
+	}
+}
+
+func TestEquivalent_DetectsDrift_HTTPAuthFields(t *testing.T) {
+	base := MonitorSpec{Type: TypeHTTP, Name: "web", HTTP: &HTTPSpec{URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}, AuthMethod: "bearer", BearerToken: "abc"}}
+	changedToken := base
+	changedToken.HTTP = &HTTPSpec{URL: base.HTTP.URL, Method: base.HTTP.Method, AcceptedStatusCodes: base.HTTP.AcceptedStatusCodes, AuthMethod: "bearer", BearerToken: "xyz"}
+	if Equivalent(base, changedToken) {
+		t.Error("Equivalent(base, changedToken) = true, want false")
+	}
+}
