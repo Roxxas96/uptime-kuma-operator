@@ -188,6 +188,13 @@ spec:
               retryInterval:
                 format: int64
                 type: integer
+              tags:
+                description: |-
+                  Tags lists tag names to apply to this monitor. A tag that doesn't
+                  already exist in Kuma is created automatically.
+                items:
+                  type: string
+                type: array
               tcp:
                 properties:
                   domainExpiryNotification:

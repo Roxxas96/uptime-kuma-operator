@@ -80,6 +80,8 @@ type Overrides struct {
 	Notifications []string
 	Proxy         int64
 	Group         string
+
+	Tags []string
 }
 
 func ParseOverrides(ann map[string]string) (Overrides, error) {
@@ -147,6 +149,11 @@ func ParseOverrides(ann map[string]string) (Overrides, error) {
 	o.Group = ann[Group]
 	if o.Proxy, err = parseIntAnnotation(ann, Proxy); err != nil {
 		return Overrides{}, err
+	}
+	if v := ann[Tags]; v != "" {
+		for _, name := range strings.Split(v, ",") {
+			o.Tags = append(o.Tags, strings.TrimSpace(name))
+		}
 	}
 	return o, nil
 }

@@ -192,3 +192,13 @@ func TestParseOverrides_InvalidProxy(t *testing.T) {
 		t.Fatal("expected error for non-integer proxy, got nil")
 	}
 }
+
+func TestParseOverrides_Tags(t *testing.T) {
+	ov, err := ParseOverrides(map[string]string{Tags: "env-prod, team-platform"})
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	if len(ov.Tags) != 2 || ov.Tags[0] != "env-prod" || ov.Tags[1] != "team-platform" {
+		t.Errorf("Tags = %v, want [env-prod team-platform]", ov.Tags)
+	}
+}
