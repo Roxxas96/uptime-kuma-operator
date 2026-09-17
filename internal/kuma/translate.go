@@ -142,9 +142,11 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 		return &bremlmonitor.GameDig{
 			Base: base,
 			GameDigDetails: bremlmonitor.GameDigDetails{
-				Hostname: spec.Gamedig.Host,
-				Port:     spec.Gamedig.Port,
-				Game:     spec.Gamedig.Game,
+				Hostname:                 spec.Gamedig.Host,
+				Port:                     spec.Gamedig.Port,
+				Game:                     spec.Gamedig.Game,
+				GameDigGivenPortOnly:     spec.Gamedig.GivenPortOnly,
+				DomainExpiryNotification: spec.Gamedig.DomainExpiryNotification,
 			},
 		}, nil
 
@@ -231,7 +233,10 @@ func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 		if err := base.As(&d); err != nil {
 			return MonitorSpec{}, fmt.Errorf("kuma: decode Gamedig monitor %d: %w", base.GetID(), err)
 		}
-		spec.Gamedig = &GamedigSpec{Host: d.Hostname, Port: d.Port, Game: d.Game}
+		spec.Gamedig = &GamedigSpec{
+			Host: d.Hostname, Port: d.Port, Game: d.Game,
+			GivenPortOnly: d.GameDigGivenPortOnly, DomainExpiryNotification: d.DomainExpiryNotification,
+		}
 	default:
 		return MonitorSpec{}, fmt.Errorf("kuma: unknown live monitor type %q (id %d)", base.Type(), base.GetID())
 	}

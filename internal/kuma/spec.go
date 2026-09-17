@@ -77,6 +77,13 @@ type GamedigSpec struct {
 	Host string
 	Port int
 	Game string
+
+	// GivenPortOnly, when true, probes only the given port instead of
+	// letting Kuma guess it. false (default) matches Kuma's "Guess Port"
+	// checked in its UI.
+	GivenPortOnly bool
+	// DomainExpiryNotification enables domain expiry notifications.
+	DomainExpiryNotification bool
 }
 
 // MonitorSpec is the operator's own monitor representation, shared by the
