@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -231,6 +232,45 @@ func persistMonitorIDs(ctx context.Context, c client.Client, obj client.Object, 
 		}
 		return c.Update(ctx, obj)
 	})
+}
+
+// resolveReferences resolves notification channel names and a group name
+// into their Kuma IDs. A name that doesn't exist in Kuma is a hard error —
+// callers should treat it exactly like any other sync failure (record a
+// SyncFailed Event, return the error for the usual requeue-with-backoff).
+// (nil, nil, nil) is returned when there's nothing to resolve, so callers
+// can skip the Kuma round-trip entirely for the common case of no
+// notifications/group configured.
+func resolveReferences(ctx context.Context, kc kuma.Client, notificationNames []string, groupName string) ([]int64, *int64, error) {
+	var notificationIDs []int64
+	if len(notificationNames) > 0 {
+		known, err := kc.Notifications(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve notifications: %w", err)
+		}
+		notificationIDs = make([]int64, 0, len(notificationNames))
+		for _, name := range notificationNames {
+			id, ok := known[name]
+			if !ok {
+				return nil, nil, fmt.Errorf("notification channel %q not found in Kuma", name)
+			}
+			notificationIDs = append(notificationIDs, id)
+		}
+	}
+
+	var groupID *int64
+	if groupName != "" {
+		id, found, err := kc.FindGroup(ctx, groupName)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve group %q: %w", groupName, err)
+		}
+		if !found {
+			return nil, nil, fmt.Errorf("group %q not found in Kuma", groupName)
+		}
+		groupID = &id
+	}
+
+	return notificationIDs, groupID, nil
 }
 
 // recordSyncFailure emits a Warning Event for a failed Kuma sync, as required

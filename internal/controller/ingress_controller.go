@@ -88,6 +88,15 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	desired := derive.IngressMonitors(ing, ov)
+	notificationIDs, groupID, err := resolveReferences(ctx, r.Kuma, ov.Notifications, ov.Group)
+	if err != nil {
+		recordSyncFailure(r.Recorder, ing, err)
+		return ctrl.Result{}, err
+	}
+	for i := range desired {
+		desired[i].Spec.NotificationIDs = notificationIDs
+		desired[i].Spec.GroupID = groupID
+	}
 	hash, err := desiredHash(desired)
 	if err != nil {
 		return ctrl.Result{}, err

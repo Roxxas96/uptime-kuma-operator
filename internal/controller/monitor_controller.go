@@ -8,6 +8,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,8 +21,9 @@ import (
 )
 
 type MonitorReconciler struct {
-	Client client.Client
-	Kuma   kuma.Client
+	Client   client.Client
+	Kuma     kuma.Client
+	Recorder record.EventRecorder
 	// DriftCheckInterval is how often a reconcile that found nothing to sync
 	// re-checks that Kuma still has the monitor it's supposed to, recreating
 	// it if deleted out-of-band (e.g. manually in the Kuma UI).
@@ -82,6 +84,14 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	desiredSpec := toKumaSpec(mon.Spec)
+	notificationIDs, groupID, err := resolveReferences(ctx, r.Kuma, mon.Spec.Notifications, mon.Spec.Group)
+	if err != nil {
+		recordSyncFailure(r.Recorder, mon, err)
+		return ctrl.Result{}, err
+	}
+	desiredSpec.NotificationIDs = notificationIDs
+	desiredSpec.GroupID = groupID
+
 	if existingID != 0 && mon.Status.ObservedGeneration == mon.Generation {
 		log.V(1).Info("desired configuration unchanged since last sync, checking Kuma for drift", "monitorID", existingID)
 		liveSpecs, err := r.Kuma.ExistingSpecs(ctx)

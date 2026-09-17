@@ -18,6 +18,9 @@ func toKumaSpec(spec uptimekumaiov1alpha1.MonitorSpec) kuma.MonitorSpec {
 		ResendInterval: spec.ResendInterval,
 		UpsideDown:     spec.UpsideDown,
 	}
+	if spec.Proxy != 0 {
+		out.ProxyID = &spec.Proxy
+	}
 
 	if spec.HTTP != nil {
 		out.HTTP = &kuma.HTTPSpec{

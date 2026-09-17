@@ -523,3 +523,52 @@ func TestIngressReconciler_SyncsPhase1Overrides(t *testing.T) {
 		t.Errorf("URL = %q, want %q", spec.HTTP.URL, "http://app.example.com/healthz")
 	}
 }
+
+func TestIngressReconciler_ResolvesNotificationsAndGroup(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newIngressReconciler(false)
+	fake.NotificationIDs = map[string]int64{"slack-prod": 1}
+	fake.GroupIDs = map[string]int64{"prod-services": 5}
+
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "web-with-refs", Namespace: "default",
+			Annotations: map[string]string{
+				annotations.Enabled:       "true",
+				annotations.Notifications: "slack-prod",
+				annotations.Group:         "prod-services",
+				annotations.Proxy:         "7",
+			},
+		},
+		Spec: networkingv1.IngressSpec{Rules: []networkingv1.IngressRule{{Host: "app.example.com"}}},
+	}
+	if err := k8sClient.Create(ctx, ing); err != nil {
+		t.Fatalf("create Ingress: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: ing.Name, Namespace: ing.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, ing)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if len(fake.Monitors) != 1 {
+		t.Fatalf("expected 1 monitor, got %d", len(fake.Monitors))
+	}
+	var spec kuma.MonitorSpec
+	for _, s := range fake.Monitors {
+		spec = s
+	}
+	if len(spec.NotificationIDs) != 1 || spec.NotificationIDs[0] != 1 {
+		t.Errorf("NotificationIDs = %v, want [1]", spec.NotificationIDs)
+	}
+	if spec.GroupID == nil || *spec.GroupID != 5 {
+		t.Errorf("GroupID = %v, want pointer to 5", spec.GroupID)
+	}
+	if spec.ProxyID == nil || *spec.ProxyID != 7 {
+		t.Errorf("ProxyID = %v, want pointer to 7", spec.ProxyID)
+	}
+}

@@ -457,3 +457,81 @@ func TestMonitorReconciler_SyncsPhase1Fields(t *testing.T) {
 		t.Errorf("Ping = %+v, want PacketSize=64", spec.Ping)
 	}
 }
+
+func TestMonitorReconciler_ResolvesNotificationsAndGroup(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newMonitorReconciler(t)
+	fake.NotificationIDs = map[string]int64{"slack-prod": 1}
+	fake.GroupIDs = map[string]int64{"prod-services": 5}
+
+	mon := &uptimekumaiov1alpha1.Monitor{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-with-refs", Namespace: "default"},
+		Spec: uptimekumaiov1alpha1.MonitorSpec{
+			Type:          uptimekumaiov1alpha1.MonitorTypePing,
+			Notifications: []string{"slack-prod"},
+			Group:         "prod-services",
+			Proxy:         7,
+			Ping:          &uptimekumaiov1alpha1.PingMonitorSpec{Host: "10.0.0.1"},
+		},
+	}
+	if err := k8sClient.Create(ctx, mon); err != nil {
+		t.Fatalf("create Monitor: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mon.Name, Namespace: mon.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, mon)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	updated := &uptimekumaiov1alpha1.Monitor{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, updated); err != nil {
+		t.Fatalf("get Monitor: %v", err)
+	}
+	id, err := strconv.ParseInt(updated.Status.MonitorID, 10, 64)
+	if err != nil {
+		t.Fatalf("status.monitorID %q is not an integer: %v", updated.Status.MonitorID, err)
+	}
+	spec, ok := fake.Monitors[id]
+	if !ok {
+		t.Fatalf("fake Kuma client has no monitor with id %d", id)
+	}
+	if len(spec.NotificationIDs) != 1 || spec.NotificationIDs[0] != 1 {
+		t.Errorf("NotificationIDs = %v, want [1]", spec.NotificationIDs)
+	}
+	if spec.GroupID == nil || *spec.GroupID != 5 {
+		t.Errorf("GroupID = %v, want pointer to 5", spec.GroupID)
+	}
+	if spec.ProxyID == nil || *spec.ProxyID != 7 {
+		t.Errorf("ProxyID = %v, want pointer to 7", spec.ProxyID)
+	}
+}
+
+func TestMonitorReconciler_UnresolvableNotificationFailsReconcile(t *testing.T) {
+	ctx := context.Background()
+	r, _ := newMonitorReconciler(t)
+
+	mon := &uptimekumaiov1alpha1.Monitor{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-bad-notif", Namespace: "default"},
+		Spec: uptimekumaiov1alpha1.MonitorSpec{
+			Type:          uptimekumaiov1alpha1.MonitorTypePing,
+			Notifications: []string{"does-not-exist"},
+			Ping:          &uptimekumaiov1alpha1.PingMonitorSpec{Host: "10.0.0.1"},
+		},
+	}
+	if err := k8sClient.Create(ctx, mon); err != nil {
+		t.Fatalf("create Monitor: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mon.Name, Namespace: mon.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, mon)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err == nil {
+		t.Fatal("expected Reconcile to fail for an unresolvable notification name")
+	}
+}

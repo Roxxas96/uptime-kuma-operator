@@ -329,3 +329,47 @@ func TestReconcileDrift_CorrectsConfigDriftInPlace(t *testing.T) {
 		t.Errorf("corrected URL = %q, want %q", got, "https://a.example.com/")
 	}
 }
+
+func TestResolveReferences(t *testing.T) {
+	fake := kuma.NewFakeClient()
+	fake.NotificationIDs = map[string]int64{"slack-prod": 1, "email-oncall": 2}
+	fake.GroupIDs = map[string]int64{"prod-services": 5}
+
+	notificationIDs, groupID, err := resolveReferences(context.Background(), fake, []string{"slack-prod", "email-oncall"}, "prod-services")
+	if err != nil {
+		t.Fatalf("resolveReferences: %v", err)
+	}
+	if len(notificationIDs) != 2 {
+		t.Fatalf("notificationIDs = %v, want 2 entries", notificationIDs)
+	}
+	if groupID == nil || *groupID != 5 {
+		t.Errorf("groupID = %v, want pointer to 5", groupID)
+	}
+}
+
+func TestResolveReferences_UnknownNotificationErrors(t *testing.T) {
+	fake := kuma.NewFakeClient()
+	_, _, err := resolveReferences(context.Background(), fake, []string{"does-not-exist"}, "")
+	if err == nil {
+		t.Fatal("expected error for unresolvable notification name, got nil")
+	}
+}
+
+func TestResolveReferences_UnknownGroupErrors(t *testing.T) {
+	fake := kuma.NewFakeClient()
+	_, _, err := resolveReferences(context.Background(), fake, nil, "does-not-exist")
+	if err == nil {
+		t.Fatal("expected error for unresolvable group name, got nil")
+	}
+}
+
+func TestResolveReferences_NoReferencesNoCall(t *testing.T) {
+	fake := kuma.NewFakeClient()
+	notificationIDs, groupID, err := resolveReferences(context.Background(), fake, nil, "")
+	if err != nil {
+		t.Fatalf("resolveReferences: %v", err)
+	}
+	if notificationIDs != nil || groupID != nil {
+		t.Errorf("resolveReferences(nil, \"\") = (%v, %v), want (nil, nil)", notificationIDs, groupID)
+	}
+}
