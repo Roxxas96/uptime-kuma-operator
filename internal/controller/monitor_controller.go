@@ -103,6 +103,10 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				// Nothing changed and Kuma still has it configured the way
 				// we want — nothing to do, but check again later in case it's
 				// deleted or edited out-of-band.
+				if err := syncTags(ctx, r.Kuma, existingID, mon.Spec.Tags); err != nil {
+					recordSyncFailure(r.Recorder, mon, err)
+					return ctrl.Result{}, err
+				}
 				log.V(1).Info("Kuma monitor matches desired state, nothing to do", "monitorID", existingID)
 				return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 			}
@@ -135,6 +139,11 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	if err := r.updateStatus(ctx, mon, strconv.FormatInt(newID, 10), generationToSync, metav1.ConditionTrue, "Synced", "monitor synced to Kuma"); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := syncTags(ctx, r.Kuma, newID, mon.Spec.Tags); err != nil {
+		recordSyncFailure(r.Recorder, mon, err)
 		return ctrl.Result{}, err
 	}
 

@@ -572,3 +572,68 @@ func TestIngressReconciler_ResolvesNotificationsAndGroup(t *testing.T) {
 		t.Errorf("ProxyID = %v, want pointer to 7", spec.ProxyID)
 	}
 }
+
+func TestIngressReconciler_SyncsTags(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newIngressReconciler(false)
+
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "web-with-tags", Namespace: "default",
+			Annotations: map[string]string{
+				annotations.Enabled: "true",
+				annotations.Tags:    "env-prod",
+			},
+		},
+		Spec: networkingv1.IngressSpec{Rules: []networkingv1.IngressRule{{Host: "tagged.example.com"}}},
+	}
+	if err := k8sClient.Create(ctx, ing); err != nil {
+		t.Fatalf("create Ingress: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: ing.Name, Namespace: ing.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, ing)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if len(fake.Monitors) != 1 {
+		t.Fatalf("expected 1 monitor, got %d", len(fake.Monitors))
+	}
+
+	updated := &networkingv1.Ingress{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, updated); err != nil {
+		t.Fatalf("get Ingress: %v", err)
+	}
+	ids, err := annotations.ParseMonitorIDs(updated.Annotations)
+	if err != nil {
+		t.Fatalf("ParseMonitorIDs: %v", err)
+	}
+	idStr, ok := ids["tagged.example.com"]
+	if !ok {
+		t.Fatalf("expected a tracked monitor ID for tagged.example.com, got %v", ids)
+	}
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		t.Fatalf("monitor ID %q is not an integer: %v", idStr, err)
+	}
+	if _, ok := fake.TagIDs["env-prod"]; !ok {
+		t.Error("tag env-prod was not auto-created")
+	}
+	if len(fake.MonitorTags[id]) != 1 {
+		t.Errorf("MonitorTags[id] = %v, want 1 entry", fake.MonitorTags[id])
+	}
+
+	// Reconcile again: the hash is unchanged, so this exercises the
+	// specsMatch "nothing to do" drift-check path rather than syncMonitors —
+	// tags must still be (re-)synced there since they can drift
+	// independently of everything else.
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("second Reconcile: %v", err)
+	}
+	if len(fake.MonitorTags[id]) != 1 {
+		t.Errorf("after no-op reconcile, MonitorTags[id] = %v, want 1 entry", fake.MonitorTags[id])
+	}
+}

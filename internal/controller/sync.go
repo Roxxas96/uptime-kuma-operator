@@ -273,6 +273,35 @@ func resolveReferences(ctx context.Context, kc kuma.Client, notificationNames []
 	return notificationIDs, groupID, nil
 }
 
+// syncTags reconciles monitorID's Kuma tag associations to match tagNames
+// exactly, creating any tag that doesn't already exist. This runs entirely
+// outside Equivalent/Upsert: Kuma manages monitor-tag associations via
+// separate calls, not as part of a monitor's own create/update payload, so
+// it needs its own step after every successful sync (including the
+// "nothing else changed" drift-check path, since tags can drift out of
+// band on their own).
+func syncTags(ctx context.Context, kc kuma.Client, monitorID int64, tagNames []string) error {
+	if len(tagNames) == 0 {
+		return kc.SetMonitorTags(ctx, monitorID, nil)
+	}
+	known, err := kc.Tags(ctx)
+	if err != nil {
+		return fmt.Errorf("sync tags: list existing: %w", err)
+	}
+	ids := make([]int64, 0, len(tagNames))
+	for _, name := range tagNames {
+		id, ok := known[name]
+		if !ok {
+			id, err = kc.CreateTag(ctx, name)
+			if err != nil {
+				return fmt.Errorf("sync tags: create %q: %w", name, err)
+			}
+		}
+		ids = append(ids, id)
+	}
+	return kc.SetMonitorTags(ctx, monitorID, ids)
+}
+
 // recordSyncFailure emits a Warning Event for a failed Kuma sync, as required
 // by the design spec's error-handling section. It tolerates a nil recorder so
 // reconcilers stay usable without a manager.
