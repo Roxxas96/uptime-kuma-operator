@@ -124,3 +124,54 @@ func TestFakeClient_FindGroup(t *testing.T) {
 		t.Errorf("FindGroup(nonexistent) = (_, %v, %v), want (false, nil)", found, err)
 	}
 }
+
+func TestFakeClient_TagsAndCreateTag(t *testing.T) {
+	c := NewFakeClient()
+	c.TagIDs = map[string]int64{"env-prod": 1}
+
+	got, err := c.Tags(context.Background())
+	if err != nil {
+		t.Fatalf("Tags: %v", err)
+	}
+	if got["env-prod"] != 1 {
+		t.Errorf("Tags = %v, want {env-prod:1}", got)
+	}
+
+	newID, err := c.CreateTag(context.Background(), "env-staging")
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	if newID == 0 {
+		t.Fatal("CreateTag returned id 0")
+	}
+	got, err = c.Tags(context.Background())
+	if err != nil {
+		t.Fatalf("Tags after create: %v", err)
+	}
+	if got["env-staging"] != newID {
+		t.Errorf("Tags after create = %v, want env-staging:%d", got, newID)
+	}
+}
+
+func TestFakeClient_SetMonitorTags(t *testing.T) {
+	c := NewFakeClient()
+	ctx := context.Background()
+	id, _ := c.Upsert(ctx, 0, MonitorSpec{Type: TypeHTTP, Name: "web", HTTP: &HTTPSpec{URL: "https://a"}})
+
+	if err := c.SetMonitorTags(ctx, id, []int64{1, 2}); err != nil {
+		t.Fatalf("SetMonitorTags: %v", err)
+	}
+	got := c.MonitorTags[id]
+	if len(got) != 2 {
+		t.Fatalf("MonitorTags[id] = %v, want 2 entries", got)
+	}
+
+	// Reconciling to a smaller set must remove the dropped tag, not just add.
+	if err := c.SetMonitorTags(ctx, id, []int64{2}); err != nil {
+		t.Fatalf("SetMonitorTags (shrink): %v", err)
+	}
+	got = c.MonitorTags[id]
+	if len(got) != 1 || got[0] != 2 {
+		t.Errorf("MonitorTags[id] after shrink = %v, want [2]", got)
+	}
+}
