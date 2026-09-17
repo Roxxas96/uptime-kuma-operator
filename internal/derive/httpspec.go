@@ -16,7 +16,7 @@ func httpMonitorSpec(name, scheme, host string, ov annotations.Overrides) kuma.M
 	if ov.Path != "" {
 		path = ov.Path
 	}
-	return kuma.MonitorSpec{
+	spec := kuma.MonitorSpec{
 		Type:           kuma.TypeHTTP,
 		Name:           name,
 		Interval:       ov.Interval,
@@ -38,4 +38,8 @@ func httpMonitorSpec(name, scheme, host string, ov annotations.Overrides) kuma.M
 			Body:                     ov.Body,
 		},
 	}
+	if ov.Proxy != 0 {
+		spec.ProxyID = &ov.Proxy
+	}
+	return spec
 }

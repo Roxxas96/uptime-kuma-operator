@@ -91,7 +91,7 @@ func main() {
 	}
 
 	if err := (&controller.MonitorReconciler{
-		Client: mgr.GetClient(), Kuma: kumaClient, DriftCheckInterval: cfg.DriftCheckInterval,
+		Client: mgr.GetClient(), Kuma: kumaClient, Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval,
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create Monitor controller")
 		os.Exit(1)

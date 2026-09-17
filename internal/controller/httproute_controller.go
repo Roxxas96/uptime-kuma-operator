@@ -88,6 +88,15 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	desired := derive.HTTPRouteMonitors(route, ov)
+	notificationIDs, groupID, err := resolveReferences(ctx, r.Kuma, ov.Notifications, ov.Group)
+	if err != nil {
+		recordSyncFailure(r.Recorder, route, err)
+		return ctrl.Result{}, err
+	}
+	for i := range desired {
+		desired[i].Spec.NotificationIDs = notificationIDs
+		desired[i].Spec.GroupID = groupID
+	}
 	hash, err := desiredHash(desired)
 	if err != nil {
 		return ctrl.Result{}, err
