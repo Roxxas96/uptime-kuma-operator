@@ -412,3 +412,48 @@ func TestMonitorSpec_RejectsSubStructForAnotherType(t *testing.T) {
 		t.Errorf("rejection message = %q, want the spec.gamedig CEL rule message", err.Error())
 	}
 }
+
+func TestMonitorReconciler_SyncsPhase1Fields(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newMonitorReconciler(t)
+
+	mon := &uptimekumaiov1alpha1.Monitor{
+		ObjectMeta: metav1.ObjectMeta{Name: "phase1-fields", Namespace: "default"},
+		Spec: uptimekumaiov1alpha1.MonitorSpec{
+			Type:        uptimekumaiov1alpha1.MonitorTypePing,
+			Description: "a friendly description",
+			Ping:        &uptimekumaiov1alpha1.PingMonitorSpec{Host: "10.0.0.1", PacketSize: 64},
+		},
+	}
+	if err := k8sClient.Create(ctx, mon); err != nil {
+		t.Fatalf("create Monitor: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mon.Name, Namespace: mon.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, mon)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	updated := &uptimekumaiov1alpha1.Monitor{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, updated); err != nil {
+		t.Fatalf("get Monitor: %v", err)
+	}
+	id, err := strconv.ParseInt(updated.Status.MonitorID, 10, 64)
+	if err != nil {
+		t.Fatalf("status.monitorID %q is not an integer: %v", updated.Status.MonitorID, err)
+	}
+	spec, ok := fake.Monitors[id]
+	if !ok {
+		t.Fatalf("fake Kuma client has no monitor with id %d", id)
+	}
+	if spec.Description != "a friendly description" {
+		t.Errorf("Description = %q, want %q", spec.Description, "a friendly description")
+	}
+	if spec.Ping == nil || spec.Ping.PacketSize != 64 {
+		t.Errorf("Ping = %+v, want PacketSize=64", spec.Ping)
+	}
+}
