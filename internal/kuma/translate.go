@@ -114,6 +114,15 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 				DomainExpiryNotification: spec.HTTP.DomainExpiryNotification,
 				Headers:                  spec.HTTP.Headers,
 				Body:                     spec.HTTP.Body,
+				AuthMethod:               bremlmonitor.AuthMethod(spec.HTTP.AuthMethod),
+				BasicAuthUser:            spec.HTTP.BasicAuthUsername,
+				BasicAuthPass:            spec.HTTP.BasicAuthPassword,
+				BearerToken:              spec.HTTP.BearerToken,
+				OAuthClientID:            spec.HTTP.OAuthClientID,
+				OAuthClientSecret:        spec.HTTP.OAuthClientSecret,
+				OAuthTokenURL:            spec.HTTP.OAuthTokenURL,
+				OAuthScopes:              spec.HTTP.OAuthScopes,
+				OAuthAudience:            spec.HTTP.OAuthAudience,
 			},
 		}, nil
 
@@ -171,16 +180,18 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 		if spec.Gamedig == nil {
 			return nil, fmt.Errorf("kuma: monitor type %s requires the Gamedig field to be set", TypeGamedig)
 		}
-		return &bremlmonitor.GameDig{
-			Base: base,
-			GameDigDetails: bremlmonitor.GameDigDetails{
-				Hostname:                 spec.Gamedig.Host,
-				Port:                     spec.Gamedig.Port,
-				Game:                     spec.Gamedig.Game,
-				GameDigGivenPortOnly:     spec.Gamedig.GivenPortOnly,
-				DomainExpiryNotification: spec.Gamedig.DomainExpiryNotification,
-			},
-		}, nil
+		details := bremlmonitor.GameDigDetails{
+			Hostname:                 spec.Gamedig.Host,
+			Port:                     spec.Gamedig.Port,
+			Game:                     spec.Gamedig.Game,
+			GameDigGivenPortOnly:     spec.Gamedig.GivenPortOnly,
+			DomainExpiryNotification: spec.Gamedig.DomainExpiryNotification,
+		}
+		if spec.Gamedig.Token != "" {
+			token := spec.Gamedig.Token
+			details.GameDigToken = &token
+		}
+		return &bremlmonitor.GameDig{Base: base, GameDigDetails: details}, nil
 
 	default:
 		return nil, fmt.Errorf("kuma: unknown monitor type %q", spec.Type)
@@ -221,6 +232,9 @@ func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 			Timeout: d.Timeout, MaxRedirects: d.MaxRedirects, IgnoreTLS: d.IgnoreTLS,
 			CacheBust: d.CacheBust, ExpiryNotification: d.ExpiryNotification,
 			DomainExpiryNotification: d.DomainExpiryNotification, Headers: d.Headers, Body: d.Body,
+			AuthMethod: string(d.AuthMethod), BasicAuthUsername: d.BasicAuthUser, BasicAuthPassword: d.BasicAuthPass,
+			BearerToken: d.BearerToken, OAuthClientID: d.OAuthClientID, OAuthClientSecret: d.OAuthClientSecret,
+			OAuthTokenURL: d.OAuthTokenURL, OAuthScopes: d.OAuthScopes, OAuthAudience: d.OAuthAudience,
 		}
 	case "port":
 		spec.Type = TypeTCP
@@ -268,10 +282,14 @@ func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 		if err := base.As(&d); err != nil {
 			return MonitorSpec{}, fmt.Errorf("kuma: decode Gamedig monitor %d: %w", base.GetID(), err)
 		}
-		spec.Gamedig = &GamedigSpec{
+		gamedig := &GamedigSpec{
 			Host: d.Hostname, Port: d.Port, Game: d.Game,
 			GivenPortOnly: d.GameDigGivenPortOnly, DomainExpiryNotification: d.DomainExpiryNotification,
 		}
+		if d.GameDigToken != nil {
+			gamedig.Token = *d.GameDigToken
+		}
+		spec.Gamedig = gamedig
 	default:
 		return MonitorSpec{}, fmt.Errorf("kuma: unknown live monitor type %q (id %d)", base.Type(), base.GetID())
 	}
