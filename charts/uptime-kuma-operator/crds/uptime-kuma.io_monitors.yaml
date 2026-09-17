@@ -92,6 +92,11 @@ spec:
                 - host
                 - port
                 type: object
+              group:
+                description: |-
+                  Group is the name of an existing parent group monitor. Must already
+                  exist in Kuma — an unresolvable name fails the reconcile.
+                type: string
               http:
                 properties:
                   acceptedStatusCodes:
@@ -139,6 +144,14 @@ spec:
                 type: integer
               name:
                 type: string
+              notifications:
+                description: |-
+                  Notifications lists notification channel names to alert on this
+                  monitor. Each must already exist in Kuma — an unresolvable name
+                  fails the reconcile.
+                items:
+                  type: string
+                type: array
               ping:
                 properties:
                   domainExpiryNotification:
@@ -157,6 +170,12 @@ spec:
                 required:
                 - host
                 type: object
+              proxy:
+                description: |-
+                  Proxy is the numeric ID of an existing Kuma proxy to route checks
+                  through. Kuma proxies have no name field, so this is ID-based.
+                format: int64
+                type: integer
               resendInterval:
                 description: |-
                   ResendInterval is how many consecutive failed checks pass between

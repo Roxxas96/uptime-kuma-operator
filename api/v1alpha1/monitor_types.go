@@ -127,6 +127,17 @@ type MonitorSpec struct {
 	// underlying check fails and "down" when it succeeds.
 	UpsideDown bool `json:"upsideDown,omitempty"`
 
+	// Notifications lists notification channel names to alert on this
+	// monitor. Each must already exist in Kuma — an unresolvable name
+	// fails the reconcile.
+	Notifications []string `json:"notifications,omitempty"`
+	// Group is the name of an existing parent group monitor. Must already
+	// exist in Kuma — an unresolvable name fails the reconcile.
+	Group string `json:"group,omitempty"`
+	// Proxy is the numeric ID of an existing Kuma proxy to route checks
+	// through. Kuma proxies have no name field, so this is ID-based.
+	Proxy int64 `json:"proxy,omitempty"`
+
 	HTTP    *HTTPMonitorSpec    `json:"http,omitempty"`
 	TCP     *TCPMonitorSpec     `json:"tcp,omitempty"`
 	Ping    *PingMonitorSpec    `json:"ping,omitempty"`

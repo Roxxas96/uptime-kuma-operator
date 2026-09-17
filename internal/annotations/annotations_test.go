@@ -167,3 +167,28 @@ func TestParseOverrides_PathUnsetDefaultsEmpty(t *testing.T) {
 		t.Errorf("Path = %q, want empty string when unset", ov.Path)
 	}
 }
+
+func TestParseOverrides_Phase2ReferenceFields(t *testing.T) {
+	ov, err := ParseOverrides(map[string]string{
+		Notifications: "slack-prod, email-oncall",
+		Group:         "prod-services",
+		Proxy:         "7",
+	})
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	want := Overrides{
+		Notifications: []string{"slack-prod", "email-oncall"},
+		Group:         "prod-services",
+		Proxy:         7,
+	}
+	if !reflect.DeepEqual(ov, want) {
+		t.Errorf("ParseOverrides = %+v, want %+v", ov, want)
+	}
+}
+
+func TestParseOverrides_InvalidProxy(t *testing.T) {
+	if _, err := ParseOverrides(map[string]string{Proxy: "not-a-number"}); err == nil {
+		t.Fatal("expected error for non-integer proxy, got nil")
+	}
+}
