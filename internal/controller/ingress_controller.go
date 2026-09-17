@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	networkingv1 "k8s.io/api/networking/v1"
@@ -115,6 +116,16 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return ctrl.Result{}, err
 		}
 		if specsMatch(desired, existingIDs, liveSpecs) {
+			for _, idStr := range existingIDs {
+				id, err := strconv.ParseInt(idStr, 10, 64)
+				if err != nil {
+					continue // already logged/handled by the surrounding sync logic
+				}
+				if err := syncTags(ctx, r.Kuma, id, ov.Tags); err != nil {
+					recordSyncFailure(r.Recorder, ing, err)
+					return ctrl.Result{}, err
+				}
+			}
 			log.V(1).Info("Kuma monitors match desired state, nothing to do", "hosts", len(desired))
 			return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 		}
@@ -124,6 +135,16 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			recordSyncFailure(r.Recorder, ing, err)
 			return ctrl.Result{}, err
 		}
+		for _, idStr := range newIDs {
+			id, err := strconv.ParseInt(idStr, 10, 64)
+			if err != nil {
+				continue // already logged/handled by the surrounding sync logic
+			}
+			if err := syncTags(ctx, r.Kuma, id, ov.Tags); err != nil {
+				recordSyncFailure(r.Recorder, ing, err)
+				return ctrl.Result{}, err
+			}
+		}
 		return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, persistMonitorIDs(ctx, r.Client, ing, newIDs, true, hash)
 	}
 
@@ -132,6 +153,16 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err != nil {
 		recordSyncFailure(r.Recorder, ing, err)
 		return ctrl.Result{}, err
+	}
+	for _, idStr := range newIDs {
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			continue // already logged/handled by the surrounding sync logic
+		}
+		if err := syncTags(ctx, r.Kuma, id, ov.Tags); err != nil {
+			recordSyncFailure(r.Recorder, ing, err)
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, persistMonitorIDs(ctx, r.Client, ing, newIDs, true, hash)

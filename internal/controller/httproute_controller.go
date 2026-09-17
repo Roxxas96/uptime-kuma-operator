@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -115,6 +116,16 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, err
 		}
 		if specsMatch(desired, existingIDs, liveSpecs) {
+			for _, idStr := range existingIDs {
+				id, err := strconv.ParseInt(idStr, 10, 64)
+				if err != nil {
+					continue // already logged/handled by the surrounding sync logic
+				}
+				if err := syncTags(ctx, r.Kuma, id, ov.Tags); err != nil {
+					recordSyncFailure(r.Recorder, route, err)
+					return ctrl.Result{}, err
+				}
+			}
 			log.V(1).Info("Kuma monitors match desired state, nothing to do", "hosts", len(desired))
 			return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 		}
@@ -124,6 +135,16 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			recordSyncFailure(r.Recorder, route, err)
 			return ctrl.Result{}, err
 		}
+		for _, idStr := range newIDs {
+			id, err := strconv.ParseInt(idStr, 10, 64)
+			if err != nil {
+				continue // already logged/handled by the surrounding sync logic
+			}
+			if err := syncTags(ctx, r.Kuma, id, ov.Tags); err != nil {
+				recordSyncFailure(r.Recorder, route, err)
+				return ctrl.Result{}, err
+			}
+		}
 		return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, persistMonitorIDs(ctx, r.Client, route, newIDs, true, hash)
 	}
 
@@ -132,6 +153,16 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		recordSyncFailure(r.Recorder, route, err)
 		return ctrl.Result{}, err
+	}
+	for _, idStr := range newIDs {
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			continue // already logged/handled by the surrounding sync logic
+		}
+		if err := syncTags(ctx, r.Kuma, id, ov.Tags); err != nil {
+			recordSyncFailure(r.Recorder, route, err)
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, persistMonitorIDs(ctx, r.Client, route, newIDs, true, hash)

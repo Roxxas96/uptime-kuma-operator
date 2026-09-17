@@ -373,3 +373,34 @@ func TestResolveReferences_NoReferencesNoCall(t *testing.T) {
 		t.Errorf("resolveReferences(nil, \"\") = (%v, %v), want (nil, nil)", notificationIDs, groupID)
 	}
 }
+
+func TestSyncTags_CreatesMissingTagsAndApplies(t *testing.T) {
+	ctx := context.Background()
+	fake := kuma.NewFakeClient()
+	id, _ := fake.Upsert(ctx, 0, kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "web", HTTP: &kuma.HTTPSpec{URL: "https://a"}})
+	fake.TagIDs["existing-tag"] = 1
+
+	if err := syncTags(ctx, fake, id, []string{"existing-tag", "brand-new-tag"}); err != nil {
+		t.Fatalf("syncTags: %v", err)
+	}
+
+	if _, ok := fake.TagIDs["brand-new-tag"]; !ok {
+		t.Error("brand-new-tag was not created")
+	}
+	if len(fake.MonitorTags[id]) != 2 {
+		t.Errorf("MonitorTags[id] = %v, want 2 entries", fake.MonitorTags[id])
+	}
+}
+
+func TestSyncTags_NoTagsIsNoop(t *testing.T) {
+	ctx := context.Background()
+	fake := kuma.NewFakeClient()
+	id, _ := fake.Upsert(ctx, 0, kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "web", HTTP: &kuma.HTTPSpec{URL: "https://a"}})
+
+	if err := syncTags(ctx, fake, id, nil); err != nil {
+		t.Fatalf("syncTags: %v", err)
+	}
+	if len(fake.MonitorTags[id]) != 0 {
+		t.Errorf("MonitorTags[id] = %v, want empty", fake.MonitorTags[id])
+	}
+}
