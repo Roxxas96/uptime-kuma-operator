@@ -56,6 +56,13 @@ the full design.
    detail — what triggered a reconcile and which decision branch was taken
    (skip, full sync, drift correction, etc).
 
+   Phase 1 monitor configuration (description, timeouts, TLS options,
+   notification toggles, custom headers/body, and more) is available via
+   both annotations (HTTP-applicable fields only — see the annotation
+   table in `docs/superpowers/specs/2026-09-14-uptime-kuma-operator-design.md`)
+   and the Monitor CRD (all types — see
+   `config/samples/uptime-kuma_v1alpha1_monitor.yaml`).
+
 4. Or declare a monitor Kuma can't derive from routing (DNS, Gamedig, TCP,
    Ping) with a `Monitor` CR — see
    `config/samples/uptime-kuma_v1alpha1_monitor.yaml`:

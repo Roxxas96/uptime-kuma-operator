@@ -107,6 +107,8 @@ invalid — there's no point running controllers that can never sync.
 
 ## Annotation contract (Ingress & HTTPRoute)
 
+Annotations apply only to HTTP-based monitors derived from `Ingress` and `HTTPRoute` resources. TCP, Ping, DNS, and Gamedig monitor types (with their own type-specific fields) are available only via the `Monitor` CRD — see `docs/superpowers/specs/2026-09-15-monitor-config-expansion-phase1-design.md` for the complete field list across all monitor types.
+
 | Annotation | Purpose |
 |---|---|
 | `uptime-kuma.io/enabled` | `"true"` / `"false"`. Governed by `OPT_IN_BY_DEFAULT`, not `WATCH_ALL`: opt-in mode (default) requires it; opt-out mode requires it only to exclude a resource. Absent: not synced (opt-in mode) / synced (opt-out mode). |
@@ -116,6 +118,18 @@ invalid — there's no point running controllers that can never sync.
 | `uptime-kuma.io/retry-interval` | Seconds between retries. Optional. |
 | `uptime-kuma.io/max-retries` | Optional. |
 | `uptime-kuma.io/accepted-statuscodes` | Comma-separated list. Optional. |
+| `uptime-kuma.io/path` | Path appended after the host to build the derived URL. Default: `/`. Must start with `/`. |
+| `uptime-kuma.io/description` | Free-text description shown in the Kuma UI. Optional. |
+| `uptime-kuma.io/resend-interval` | How many consecutive failed checks pass between repeated down notifications. `0` disables resending (Kuma default). |
+| `uptime-kuma.io/upside-down` | `"true"` / `"false"`. Inverts up/down semantics. Default: `false`. |
+| `uptime-kuma.io/timeout` | Request timeout in seconds. Optional, Kuma default otherwise. |
+| `uptime-kuma.io/max-redirects` | Maximum redirects to follow. Optional. |
+| `uptime-kuma.io/ignore-tls` | `"true"` / `"false"`. Skip TLS certificate validation. Default: `false`. |
+| `uptime-kuma.io/cache-bust` | `"true"` / `"false"`. Append a cache-busting query parameter. Default: `false`. |
+| `uptime-kuma.io/expiry-notification` | `"true"` / `"false"`. TLS certificate expiry notifications. Default: `false`. |
+| `uptime-kuma.io/domain-expiry-notification` | `"true"` / `"false"`. Domain expiry notifications. Default: `false`. |
+| `uptime-kuma.io/headers` | Opaque HTTP headers passthrough (same raw text the Kuma UI accepts). Optional. |
+| `uptime-kuma.io/body` | Opaque HTTP request body passthrough. Optional. |
 | `uptime-kuma.io/monitor-ids` | **Operator-written.** JSON map `{"host": "kumaMonitorID"}`. One Ingress/HTTPRoute can expand into multiple monitors (one per host). |
 | `uptime-kuma.io/synced-hash` | **Operator-written.** SHA-256 fingerprint of the derived monitor set as of the last successful sync — lets the reconciler skip the Kuma round-trip entirely when nothing relevant changed. |
 
