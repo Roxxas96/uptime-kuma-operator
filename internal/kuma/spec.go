@@ -104,6 +104,13 @@ type MonitorSpec struct {
 	// UpsideDown inverts up/down: the monitor is reported "up" when the
 	// underlying check fails and "down" when it succeeds.
 	UpsideDown bool
+	// NotificationIDs is the set of Kuma notification channel IDs to alert.
+	// Order does not matter; Equivalent compares it as a set.
+	NotificationIDs []int64
+	// GroupID is the parent group monitor's ID, or nil for no group.
+	GroupID *int64
+	// ProxyID is the Kuma proxy's ID to route checks through, or nil for none.
+	ProxyID *int64
 
 	HTTP    *HTTPSpec
 	TCP     *TCPSpec

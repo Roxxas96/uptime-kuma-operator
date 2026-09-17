@@ -33,6 +33,12 @@ type Client interface {
 	// negative a per-ID "get" would give were it to change error shape
 	// across Kuma versions (see the design spec's decisions log).
 	ExistingSpecs(ctx context.Context) (map[int64]MonitorSpec, error)
+	// Notifications returns every existing notification channel's name -> ID.
+	Notifications(ctx context.Context) (map[string]int64, error)
+	// FindGroup returns the ID of the group-type monitor named name, or
+	// found=false if no such group exists. Groups must be created directly
+	// in Kuma first — the operator never creates one automatically.
+	FindGroup(ctx context.Context, name string) (id int64, found bool, err error)
 }
 
 // realClient is a Client backed by a real Socket.IO connection to an
@@ -98,6 +104,28 @@ func (r *realClient) ExistingSpecs(ctx context.Context) (map[int64]MonitorSpec, 
 		specs[m.GetID()] = spec
 	}
 	return specs, nil
+}
+
+func (r *realClient) Notifications(ctx context.Context) (map[string]int64, error) {
+	notifs := r.inner.GetNotifications(ctx)
+	out := make(map[string]int64, len(notifs))
+	for _, n := range notifs {
+		out[n.Name] = n.ID
+	}
+	return out, nil
+}
+
+func (r *realClient) FindGroup(ctx context.Context, name string) (int64, bool, error) {
+	monitors, err := r.inner.GetMonitors(ctx)
+	if err != nil {
+		return 0, false, err
+	}
+	for _, m := range monitors {
+		if m.Type() == "group" && m.Name == name {
+			return m.GetID(), true, nil
+		}
+	}
+	return 0, false, nil
 }
 
 var _ Client = (*realClient)(nil)

@@ -427,3 +427,68 @@ func TestEquivalent_DetectsDrift_GamedigFields(t *testing.T) {
 		t.Error("Equivalent(base, changedGivenPortOnly) = true, want false")
 	}
 }
+
+func TestFromBremlMonitor_RoundTripsThroughToBremlMonitor_ReferencedFields(t *testing.T) {
+	groupID := int64(5)
+	proxyID := int64(7)
+	spec := MonitorSpec{
+		Type: TypeHTTP, Name: "web",
+		NotificationIDs: []int64{1, 2},
+		GroupID:         &groupID,
+		ProxyID:         &proxyID,
+		HTTP:            &HTTPSpec{URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}},
+	}
+
+	mon, err := ToBremlMonitor(9, spec)
+	if err != nil {
+		t.Fatalf("ToBremlMonitor: %v", err)
+	}
+	data, err := json.Marshal(mon)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var base bremlmonitor.Base
+	if err := json.Unmarshal(data, &base); err != nil {
+		t.Fatalf("unmarshal into Base: %v", err)
+	}
+
+	got, err := FromBremlMonitor(base)
+	if err != nil {
+		t.Fatalf("FromBremlMonitor: %v", err)
+	}
+	if !Equivalent(spec, got) {
+		t.Errorf("FromBremlMonitor(round-tripped ToBremlMonitor(%+v)) = %+v, want an equivalent spec", spec, got)
+	}
+}
+
+func TestEquivalent_DetectsDrift_ReferencedFields(t *testing.T) {
+	base := MonitorSpec{Type: TypeHTTP, Name: "web", HTTP: &HTTPSpec{URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}}}
+
+	changedNotifications := base
+	changedNotifications.NotificationIDs = []int64{1}
+	if Equivalent(base, changedNotifications) {
+		t.Error("Equivalent(base, changedNotifications) = true, want false")
+	}
+
+	groupID := int64(5)
+	changedGroup := base
+	changedGroup.GroupID = &groupID
+	if Equivalent(base, changedGroup) {
+		t.Error("Equivalent(base, changedGroup) = true, want false")
+	}
+
+	proxyID := int64(7)
+	changedProxy := base
+	changedProxy.ProxyID = &proxyID
+	if Equivalent(base, changedProxy) {
+		t.Error("Equivalent(base, changedProxy) = true, want false")
+	}
+}
+
+func TestEquivalent_NotificationIDsOrderIndependent(t *testing.T) {
+	a := MonitorSpec{Type: TypeHTTP, Name: "web", NotificationIDs: []int64{1, 2}, HTTP: &HTTPSpec{URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}}}
+	b := MonitorSpec{Type: TypeHTTP, Name: "web", NotificationIDs: []int64{2, 1}, HTTP: &HTTPSpec{URL: "https://example.com/", Method: "GET", AcceptedStatusCodes: []string{"200-299"}}}
+	if !Equivalent(a, b) {
+		t.Error("Equivalent(a, b) = false, want true — NotificationIDs order must not matter")
+	}
+}

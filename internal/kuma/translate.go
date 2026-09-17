@@ -47,20 +47,49 @@ func orDefault(v, def int64) int64 {
 	return v
 }
 
+func equalInt64Ptr(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func equalInt64Sets(a, b []int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[int64]int, len(a))
+	for _, v := range a {
+		seen[v]++
+	}
+	for _, v := range b {
+		seen[v]--
+	}
+	for _, count := range seen {
+		if count != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // ToBremlMonitor converts spec into the concrete breml monitor.Monitor
 // implementation for its type. id is the existing Kuma monitor ID (0 for a
 // not-yet-created monitor).
 func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 	spec = normalizeSpec(spec)
 	base := bremlmonitor.Base{
-		ID:             id,
-		Name:           spec.Name,
-		Interval:       spec.Interval,
-		RetryInterval:  spec.RetryInterval,
-		MaxRetries:     spec.MaxRetries,
-		ResendInterval: spec.ResendInterval,
-		UpsideDown:     spec.UpsideDown,
-		IsActive:       true,
+		ID:              id,
+		Name:            spec.Name,
+		Interval:        spec.Interval,
+		RetryInterval:   spec.RetryInterval,
+		MaxRetries:      spec.MaxRetries,
+		ResendInterval:  spec.ResendInterval,
+		UpsideDown:      spec.UpsideDown,
+		NotificationIDs: spec.NotificationIDs,
+		Parent:          spec.GroupID,
+		ProxyID:         spec.ProxyID,
+		IsActive:        true,
 	}
 	if spec.Description != "" {
 		base.Description = &spec.Description
@@ -166,12 +195,15 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 // in Kuma and are never compared or overwritten by the operator.
 func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 	spec := MonitorSpec{
-		Name:           base.Name,
-		Interval:       base.Interval,
-		RetryInterval:  base.RetryInterval,
-		MaxRetries:     base.MaxRetries,
-		ResendInterval: base.ResendInterval,
-		UpsideDown:     base.UpsideDown,
+		Name:            base.Name,
+		Interval:        base.Interval,
+		RetryInterval:   base.RetryInterval,
+		MaxRetries:      base.MaxRetries,
+		ResendInterval:  base.ResendInterval,
+		UpsideDown:      base.UpsideDown,
+		NotificationIDs: base.NotificationIDs,
+		GroupID:         base.Parent,
+		ProxyID:         base.ProxyID,
 	}
 	if base.Description != nil {
 		spec.Description = *base.Description
@@ -262,7 +294,10 @@ func Equivalent(desired, live MonitorSpec) bool {
 	if d.Type != live.Type || d.Name != live.Name || d.Interval != live.Interval ||
 		d.RetryInterval != live.RetryInterval || d.MaxRetries != live.MaxRetries ||
 		d.Description != live.Description || d.ResendInterval != live.ResendInterval ||
-		d.UpsideDown != live.UpsideDown {
+		d.UpsideDown != live.UpsideDown ||
+		!equalInt64Sets(d.NotificationIDs, live.NotificationIDs) ||
+		!equalInt64Ptr(d.GroupID, live.GroupID) ||
+		!equalInt64Ptr(d.ProxyID, live.ProxyID) {
 		return false
 	}
 	switch d.Type {
