@@ -3,6 +3,7 @@ package annotations
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -111,7 +112,7 @@ func ParseOverrides(ann map[string]string) (Overrides, error) {
 	if o.Timeout, err = parseIntAnnotation(ann, Timeout); err != nil {
 		return Overrides{}, err
 	}
-	if o.MaxRedirects, err = parseIntAnnotation(ann, MaxRedirects); err != nil {
+	if o.MaxRedirects, err = parseIntAnnotationForIntRange(ann, MaxRedirects); err != nil {
 		return Overrides{}, err
 	}
 	if o.UpsideDown, err = parseBoolAnnotation(ann, UpsideDown); err != nil {
@@ -140,6 +141,17 @@ func parseIntAnnotation(ann map[string]string, key string) (int64, error) {
 	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("annotations: %s must be an integer, got %q", key, v)
+	}
+	return n, nil
+}
+
+func parseIntAnnotationForIntRange(ann map[string]string, key string) (int64, error) {
+	n, err := parseIntAnnotation(ann, key)
+	if err != nil {
+		return 0, err
+	}
+	if n < math.MinInt || n > math.MaxInt {
+		return 0, fmt.Errorf("annotations: %s must fit in platform int range [%d, %d], got %d", key, math.MinInt, math.MaxInt, n)
 	}
 	return n, nil
 }
