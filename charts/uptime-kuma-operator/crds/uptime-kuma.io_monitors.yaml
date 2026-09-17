@@ -194,7 +194,8 @@ spec:
                       TLSMode selects the TLS handshake mode: "" (plain TCP), "nostarttls",
                       "secure", or "starttls".
                     enum:
-                    - ;nostarttls
+                    - ""
+                    - nostarttls
                     - secure
                     - starttls
                     type: string

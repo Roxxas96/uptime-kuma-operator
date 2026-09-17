@@ -46,7 +46,7 @@ type TCPMonitorSpec struct {
 
 	// TLSMode selects the TLS handshake mode: "" (plain TCP), "nostarttls",
 	// "secure", or "starttls".
-	// +kubebuilder:validation:Enum=;nostarttls;secure;starttls
+	// +kubebuilder:validation:Enum="";nostarttls;secure;starttls
 	TLSMode string `json:"tlsMode,omitempty"`
 	// ExpectedSSLAlert is the TLS alert name expected during the handshake
 	// (e.g. for mTLS verification).
