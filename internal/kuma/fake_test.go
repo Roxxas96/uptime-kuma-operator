@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 )
 
@@ -67,7 +68,7 @@ func TestFakeClient_ExistingSpecs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExistingSpecs: %v", err)
 	}
-	if specs[id1] != specA || specs[id2] != specB {
+	if !reflect.DeepEqual(specs[id1], specA) || !reflect.DeepEqual(specs[id2], specB) {
 		t.Errorf("ExistingSpecs = %v, want %d=%v and %d=%v", specs, id1, specA, id2, specB)
 	}
 
@@ -81,7 +82,7 @@ func TestFakeClient_ExistingSpecs(t *testing.T) {
 	if _, ok := specs[id1]; ok {
 		t.Errorf("ExistingSpecs = %v, want %d absent after delete", specs, id1)
 	}
-	if specs[id2] != specB {
+	if !reflect.DeepEqual(specs[id2], specB) {
 		t.Errorf("ExistingSpecs = %v, want %d still present", specs, id2)
 	}
 }
@@ -93,5 +94,33 @@ func TestFakeClient_ExistingSpecsErr(t *testing.T) {
 
 	if _, err := c.ExistingSpecs(context.Background()); !errors.Is(err, sentinel) {
 		t.Errorf("ExistingSpecs error = %v, want %v", err, sentinel)
+	}
+}
+
+func TestFakeClient_Notifications(t *testing.T) {
+	c := NewFakeClient()
+	c.NotificationIDs = map[string]int64{"slack-prod": 1, "email-oncall": 2}
+
+	got, err := c.Notifications(context.Background())
+	if err != nil {
+		t.Fatalf("Notifications: %v", err)
+	}
+	if got["slack-prod"] != 1 || got["email-oncall"] != 2 {
+		t.Errorf("Notifications = %v, want {slack-prod:1 email-oncall:2}", got)
+	}
+}
+
+func TestFakeClient_FindGroup(t *testing.T) {
+	c := NewFakeClient()
+	c.GroupIDs = map[string]int64{"prod-services": 5}
+
+	id, found, err := c.FindGroup(context.Background(), "prod-services")
+	if err != nil || !found || id != 5 {
+		t.Errorf("FindGroup(prod-services) = (%d, %v, %v), want (5, true, nil)", id, found, err)
+	}
+
+	_, found, err = c.FindGroup(context.Background(), "nonexistent")
+	if err != nil || found {
+		t.Errorf("FindGroup(nonexistent) = (_, %v, %v), want (false, nil)", found, err)
 	}
 }
