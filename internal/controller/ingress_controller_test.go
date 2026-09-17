@@ -476,3 +476,50 @@ func TestIngressReconciler_DeletionRemovesMonitorAndFinalizer(t *testing.T) {
 		t.Errorf("expected monitor deleted after Ingress deletion, got %d remaining", len(fake.Monitors))
 	}
 }
+
+func TestIngressReconciler_SyncsPhase1Overrides(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newIngressReconciler(false)
+
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "phase1-overrides", Namespace: "default",
+			Annotations: map[string]string{
+				annotations.Enabled:     "true",
+				annotations.Description: "a friendly description",
+				annotations.IgnoreTLS:   "true",
+				annotations.Path:        "/healthz",
+			},
+		},
+		Spec: networkingv1.IngressSpec{Rules: []networkingv1.IngressRule{{Host: "app.example.com"}}},
+	}
+	if err := k8sClient.Create(ctx, ing); err != nil {
+		t.Fatalf("create Ingress: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: ing.Name, Namespace: ing.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, ing)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if len(fake.Monitors) != 1 {
+		t.Fatalf("expected 1 monitor, got %d", len(fake.Monitors))
+	}
+	var spec kuma.MonitorSpec
+	for _, s := range fake.Monitors {
+		spec = s
+	}
+	if spec.Description != "a friendly description" {
+		t.Errorf("Description = %q, want %q", spec.Description, "a friendly description")
+	}
+	if spec.HTTP == nil || !spec.HTTP.IgnoreTLS {
+		t.Errorf("HTTP.IgnoreTLS = %v, want true", spec.HTTP)
+	}
+	if spec.HTTP.URL != "http://app.example.com/healthz" {
+		t.Errorf("URL = %q, want %q", spec.HTTP.URL, "http://app.example.com/healthz")
+	}
+}
