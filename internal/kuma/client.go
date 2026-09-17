@@ -2,9 +2,11 @@ package kuma
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	bremlkuma "github.com/breml/go-uptime-kuma-client"
+	"github.com/breml/go-uptime-kuma-client/tag"
 )
 
 // connectTimeout bounds how long NewClient waits for the initial Socket.IO
@@ -39,6 +41,15 @@ type Client interface {
 	// found=false if no such group exists. Groups must be created directly
 	// in Kuma first — the operator never creates one automatically.
 	FindGroup(ctx context.Context, name string) (id int64, found bool, err error)
+	// Tags returns every existing tag's name -> ID.
+	Tags(ctx context.Context) (map[string]int64, error)
+	// CreateTag creates a new tag with a sensible default color and
+	// returns its ID.
+	CreateTag(ctx context.Context, name string) (int64, error)
+	// SetMonitorTags reconciles monitorID's tag associations to be exactly
+	// tagIDs, adding missing ones and removing any not in the set. An
+	// unchanged tag set costs one cache read and zero mutating calls.
+	SetMonitorTags(ctx context.Context, monitorID int64, tagIDs []int64) error
 }
 
 // realClient is a Client backed by a real Socket.IO connection to an
@@ -126,6 +137,55 @@ func (r *realClient) FindGroup(ctx context.Context, name string) (int64, bool, e
 		}
 	}
 	return 0, false, nil
+}
+
+const defaultTagColor = "#3F51B5"
+
+func (r *realClient) Tags(ctx context.Context) (map[string]int64, error) {
+	tags, err := r.inner.GetTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int64, len(tags))
+	for _, t := range tags {
+		out[t.Name] = t.ID
+	}
+	return out, nil
+}
+
+func (r *realClient) CreateTag(ctx context.Context, name string) (int64, error) {
+	return r.inner.CreateTag(ctx, tag.Tag{Name: name, Color: defaultTagColor})
+}
+
+func (r *realClient) SetMonitorTags(ctx context.Context, monitorID int64, tagIDs []int64) error {
+	current, err := r.inner.GetMonitorTags(ctx, monitorID)
+	if err != nil {
+		return fmt.Errorf("set monitor tags: get current: %w", err)
+	}
+	currentIDs := make(map[int64]bool, len(current))
+	for _, t := range current {
+		currentIDs[t.TagID] = true
+	}
+	wantIDs := make(map[int64]bool, len(tagIDs))
+	for _, id := range tagIDs {
+		wantIDs[id] = true
+	}
+
+	for id := range wantIDs {
+		if !currentIDs[id] {
+			if _, err := r.inner.AddMonitorTag(ctx, id, monitorID, ""); err != nil {
+				return fmt.Errorf("set monitor tags: add tag %d: %w", id, err)
+			}
+		}
+	}
+	for id := range currentIDs {
+		if !wantIDs[id] {
+			if err := r.inner.DeleteMonitorTag(ctx, id, monitorID); err != nil {
+				return fmt.Errorf("set monitor tags: remove tag %d: %w", id, err)
+			}
+		}
+	}
+	return nil
 }
 
 var _ Client = (*realClient)(nil)
