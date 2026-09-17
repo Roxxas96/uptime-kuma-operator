@@ -30,6 +30,11 @@ const (
 	Body                     = "uptime-kuma.io/body"
 	Path                     = "uptime-kuma.io/path"
 
+	Tags          = "uptime-kuma.io/tags"
+	Notifications = "uptime-kuma.io/notifications"
+	Proxy         = "uptime-kuma.io/proxy"
+	Group         = "uptime-kuma.io/group"
+
 	MonitorIDs = "uptime-kuma.io/monitor-ids"
 	SyncedHash = "uptime-kuma.io/synced-hash"
 	Finalizer  = "uptime-kuma.io/finalizer"
@@ -71,6 +76,10 @@ type Overrides struct {
 	Headers                  string
 	Body                     string
 	Path                     string // "" | "/..." — must start with "/" if set
+
+	Notifications []string
+	Proxy         int64
+	Group         string
 }
 
 func ParseOverrides(ann map[string]string) (Overrides, error) {
@@ -128,6 +137,15 @@ func ParseOverrides(ann map[string]string) (Overrides, error) {
 		return Overrides{}, err
 	}
 	if o.DomainExpiryNotification, err = parseBoolAnnotation(ann, DomainExpiryNotification); err != nil {
+		return Overrides{}, err
+	}
+	if v := ann[Notifications]; v != "" {
+		for _, name := range strings.Split(v, ",") {
+			o.Notifications = append(o.Notifications, strings.TrimSpace(name))
+		}
+	}
+	o.Group = ann[Group]
+	if o.Proxy, err = parseIntAnnotation(ann, Proxy); err != nil {
 		return Overrides{}, err
 	}
 	return o, nil
