@@ -130,8 +130,14 @@ Annotations apply only to HTTP-based monitors derived from `Ingress` and `HTTPRo
 | `uptime-kuma.io/domain-expiry-notification` | `"true"` / `"false"`. Domain expiry notifications. Default: `false`. |
 | `uptime-kuma.io/headers` | Opaque HTTP headers passthrough (same raw text the Kuma UI accepts). Optional. |
 | `uptime-kuma.io/body` | Opaque HTTP request body passthrough. Optional. |
+| `uptime-kuma.io/tags` | Comma-separated list of tag names. Auto-creates any tag that doesn't already exist in Kuma. |
+| `uptime-kuma.io/notifications` | Comma-separated list of Kuma notification channel names. Every name must already exist in Kuma — a missing one is a hard reconcile error, never silently skipped. |
+| `uptime-kuma.io/proxy` | Kuma proxy ID (integer). |
+| `uptime-kuma.io/group` | Kuma monitor group name. Must already exist in Kuma — missing is a hard reconcile error, same as notifications. |
 | `uptime-kuma.io/monitor-ids` | **Operator-written.** JSON map `{"host": "kumaMonitorID"}`. One Ingress/HTTPRoute can expand into multiple monitors (one per host). |
 | `uptime-kuma.io/synced-hash` | **Operator-written.** SHA-256 fingerprint of the derived monitor set as of the last successful sync — lets the reconciler skip the Kuma round-trip entirely when nothing relevant changed. |
+
+HTTP Basic/Bearer/OAuth2-Client-Credentials auth and Gamedig's `token` are Monitor-CRD-only — there is no annotation form, since a `SecretKeySelector` (a Kubernetes object reference) has no sane single-string annotation representation. See `docs/superpowers/specs/2026-09-18-monitor-config-expansion-phase2-design.md` for the complete field list.
 
 ## Reconciliation flow — Ingress & HTTPRoute
 

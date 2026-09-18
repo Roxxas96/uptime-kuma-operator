@@ -63,6 +63,17 @@ the full design.
    and the Monitor CRD (all types — see
    `config/samples/uptime-kuma_v1alpha1_monitor.yaml`).
 
+   Phase 2 adds `tags`, `notifications`, `proxy`, and `group`, also
+   available via annotation on `Ingress`/`HTTPRoute` (same table as
+   above) as well as on the Monitor CRD. HTTP Basic/Bearer/OAuth2-Client-
+   Credentials auth and the Gamedig `token` are Monitor-CRD-only, since
+   each credential is a `SecretKeySelector` referencing a Kubernetes
+   `Secret` in the same namespace — there's no sane way to represent that
+   as a single annotation value. See the updated
+   `config/samples/uptime-kuma_v1alpha1_monitor.yaml` for a worked
+   example and `docs/superpowers/specs/2026-09-18-monitor-config-expansion-phase2-design.md`
+   for the full design.
+
 4. Or declare a monitor Kuma can't derive from routing (DNS, Gamedig, TCP,
    Ping) with a `Monitor` CR — see
    `config/samples/uptime-kuma_v1alpha1_monitor.yaml`:
