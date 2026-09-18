@@ -574,6 +574,58 @@ func TestIngressReconciler_ResolvesNotificationsAndGroup(t *testing.T) {
 	}
 }
 
+func TestIngressReconciler_AppliesDefaultTagsEvenWithoutOwnTags(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newIngressReconciler(false)
+	r.DefaultTags = []string{"k8s"}
+
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "web-default-tags", Namespace: "default",
+			Annotations: map[string]string{annotations.Enabled: "true"},
+		},
+		Spec: networkingv1.IngressSpec{Rules: []networkingv1.IngressRule{{Host: "default-tags.example.com"}}},
+	}
+	if err := k8sClient.Create(ctx, ing); err != nil {
+		t.Fatalf("create Ingress: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: ing.Name, Namespace: ing.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, ing)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if len(fake.Monitors) != 1 {
+		t.Fatalf("expected 1 monitor, got %d", len(fake.Monitors))
+	}
+
+	updated := &networkingv1.Ingress{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, updated); err != nil {
+		t.Fatalf("get Ingress: %v", err)
+	}
+	ids, err := annotations.ParseMonitorIDs(updated.Annotations)
+	if err != nil {
+		t.Fatalf("ParseMonitorIDs: %v", err)
+	}
+	idStr, ok := ids["default-tags.example.com"]
+	if !ok {
+		t.Fatalf("expected a tracked monitor ID for default-tags.example.com, got %v", ids)
+	}
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		t.Fatalf("monitor ID %q is not an integer: %v", idStr, err)
+	}
+	if _, ok := fake.TagIDs["k8s"]; !ok {
+		t.Error("default tag k8s was not auto-created")
+	}
+	if len(fake.MonitorTags[id]) != 1 {
+		t.Errorf("MonitorTags[id] = %v, want the 1 default tag applied even though the Ingress itself declares none", fake.MonitorTags[id])
+	}
+}
+
 func TestIngressReconciler_SyncsTags(t *testing.T) {
 	ctx := context.Background()
 	r, fake := newIngressReconciler(false)

@@ -28,6 +28,10 @@ type MonitorReconciler struct {
 	// re-checks that Kuma still has the monitor it's supposed to, recreating
 	// it if deleted out-of-band (e.g. manually in the Kuma UI).
 	DriftCheckInterval time.Duration
+	// DefaultTags lists tag names applied to every monitor this reconciler
+	// manages, in addition to whatever the Monitor's own spec.tags
+	// specifies. See sync.go's mergeTags doc comment.
+	DefaultTags []string
 }
 
 func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -134,7 +138,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				// Nothing changed and Kuma still has it configured the way
 				// we want — nothing to do, but check again later in case it's
 				// deleted or edited out-of-band.
-				if err := syncTags(ctx, r.Kuma, existingID, mon.Spec.Tags); err != nil {
+				if err := syncTags(ctx, r.Kuma, existingID, mergeTags(r.DefaultTags, mon.Spec.Tags)); err != nil {
 					recordSyncFailure(r.Recorder, mon, err)
 					return ctrl.Result{}, err
 				}
@@ -173,7 +177,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	if err := syncTags(ctx, r.Kuma, newID, mon.Spec.Tags); err != nil {
+	if err := syncTags(ctx, r.Kuma, newID, mergeTags(r.DefaultTags, mon.Spec.Tags)); err != nil {
 		recordSyncFailure(r.Recorder, mon, err)
 		return ctrl.Result{}, err
 	}

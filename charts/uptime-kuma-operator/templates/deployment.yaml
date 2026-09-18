@@ -40,6 +40,8 @@ spec:
               value: {{ .Values.driftCheckInterval | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.logLevel | quote }}
+            - name: DEFAULT_TAGS
+              value: {{ join "," .Values.defaultTags | quote }}
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:

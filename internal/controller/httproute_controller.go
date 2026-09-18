@@ -29,6 +29,10 @@ type HTTPRouteReconciler struct {
 	// re-checks that Kuma still has what it's supposed to. See sync.go's
 	// specsMatch/reconcileDrift doc comments for why this exists.
 	DriftCheckInterval time.Duration
+	// DefaultTags lists tag names applied to every monitor this reconciler
+	// manages, in addition to whatever the HTTPRoute's own tags annotation
+	// specifies. See sync.go's mergeTags doc comment.
+	DefaultTags []string
 }
 
 func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -121,7 +125,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				if err != nil {
 					continue // already logged/handled by the surrounding sync logic
 				}
-				if err := syncTags(ctx, r.Kuma, id, ov.Tags); err != nil {
+				if err := syncTags(ctx, r.Kuma, id, mergeTags(r.DefaultTags, ov.Tags)); err != nil {
 					recordSyncFailure(r.Recorder, route, err)
 					return ctrl.Result{}, err
 				}
@@ -147,7 +151,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			if err != nil {
 				continue // already logged/handled by the surrounding sync logic
 			}
-			if err := syncTags(ctx, r.Kuma, id, ov.Tags); err != nil {
+			if err := syncTags(ctx, r.Kuma, id, mergeTags(r.DefaultTags, ov.Tags)); err != nil {
 				recordSyncFailure(r.Recorder, route, err)
 				return ctrl.Result{}, err
 			}
@@ -170,7 +174,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err != nil {
 			continue // already logged/handled by the surrounding sync logic
 		}
-		if err := syncTags(ctx, r.Kuma, id, ov.Tags); err != nil {
+		if err := syncTags(ctx, r.Kuma, id, mergeTags(r.DefaultTags, ov.Tags)); err != nil {
 			recordSyncFailure(r.Recorder, route, err)
 			return ctrl.Result{}, err
 		}

@@ -34,6 +34,12 @@ type Config struct {
 	// triggered a reconcile, which decision branch was taken) beyond the
 	// default create/update/delete action logs.
 	LogLevel string
+	// DefaultTags lists tag names applied to every monitor the operator
+	// manages, in addition to whatever tags that monitor's own
+	// Ingress/HTTPRoute/Monitor resource specifies. Empty by default —
+	// this is opt-in, cluster-operator-level configuration, not something
+	// any single managed resource controls.
+	DefaultTags []string
 }
 
 // validLogLevels are the accepted values for LOG_LEVEL, matching what
@@ -84,6 +90,15 @@ func Load(getenv func(string) string) (Config, error) {
 			ns = strings.TrimSpace(ns)
 			if ns != "" {
 				cfg.WatchNamespaces = append(cfg.WatchNamespaces, ns)
+			}
+		}
+	}
+
+	if raw := getenv("DEFAULT_TAGS"); raw != "" {
+		for _, tag := range strings.Split(raw, ",") {
+			tag = strings.TrimSpace(tag)
+			if tag != "" {
+				cfg.DefaultTags = append(cfg.DefaultTags, tag)
 			}
 		}
 	}
