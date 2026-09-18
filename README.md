@@ -32,6 +32,10 @@ the full design.
    `ClusterRole`). This only changes *which namespaces* are watched — it
    has no effect on whether a resource needs the opt-in annotation below.
 
+   Pulling the operator image from a private registry? Set
+   `--set imagePullSecrets[0].name=my-registry-secret` to an existing
+   `docker-registry` Secret in the release namespace.
+
 3. Opt an Ingress in:
 
    ```bash

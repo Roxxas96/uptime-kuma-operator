@@ -2,6 +2,10 @@ image:
   repository: uptime-kuma-operator
   tag: latest
 
+# Names of existing Secrets (docker-registry type) to pull the operator
+# image from a private registry. e.g. [{name: my-registry-secret}]
+imagePullSecrets: []
+
 kuma:
   url: ""
   existingSecret: "" # must contain keys "username" and "password"
