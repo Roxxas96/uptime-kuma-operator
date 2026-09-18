@@ -35,6 +35,15 @@ func toKumaSpec(spec uptimekumaiov1alpha1.MonitorSpec) kuma.MonitorSpec {
 			DomainExpiryNotification: spec.HTTP.DomainExpiryNotification,
 			Headers:                  spec.HTTP.Headers,
 			Body:                     spec.HTTP.Body,
+			AuthMethod:               spec.HTTP.AuthMethod,
+			BasicAuthUsername:        spec.HTTP.BasicAuthUsername,
+			OAuthClientID:            spec.HTTP.OAuthClientID,
+			OAuthTokenURL:            spec.HTTP.OAuthTokenURL,
+			OAuthScopes:              spec.HTTP.OAuthScopes,
+			OAuthAudience:            spec.HTTP.OAuthAudience,
+			// BasicAuthPassword, BearerToken, OAuthClientSecret are resolved
+			// separately in monitor_controller.go, which holds the
+			// client.Client toKumaSpec doesn't have.
 		}
 	}
 	if spec.TCP != nil {

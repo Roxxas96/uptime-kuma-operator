@@ -273,6 +273,23 @@ func resolveReferences(ctx context.Context, kc kuma.Client, notificationNames []
 	return notificationIDs, groupID, nil
 }
 
+// resolveSecret reads the value at ref's key from the Secret named ref.Name
+// in namespace. Returns "" with no error if ref is nil (field not configured).
+func resolveSecret(ctx context.Context, c client.Client, namespace string, ref *corev1.SecretKeySelector) (string, error) {
+	if ref == nil {
+		return "", nil
+	}
+	secret := &corev1.Secret{}
+	if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: ref.Name}, secret); err != nil {
+		return "", fmt.Errorf("resolve secret %s/%s: %w", namespace, ref.Name, err)
+	}
+	value, ok := secret.Data[ref.Key]
+	if !ok {
+		return "", fmt.Errorf("resolve secret %s/%s: key %q not found", namespace, ref.Name, ref.Key)
+	}
+	return string(value), nil
+}
+
 // syncTags reconciles monitorID's Kuma tag associations to match tagNames
 // exactly, creating any tag that doesn't already exist. This runs entirely
 // outside Equivalent/Upsert: Kuma manages monitor-tag associations via
