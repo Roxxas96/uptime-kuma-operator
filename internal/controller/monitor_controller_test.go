@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strconv"
@@ -8,10 +9,13 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	zaplog "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	uptimekumaiov1alpha1 "uptime-kuma-operator/api/v1alpha1"
 	"uptime-kuma-operator/internal/config"
@@ -574,5 +578,139 @@ func TestMonitorReconciler_SyncsTags(t *testing.T) {
 	}
 	if len(fake.MonitorTags[id]) != 1 {
 		t.Errorf("MonitorTags[id] = %v, want 1 entry", fake.MonitorTags[id])
+	}
+}
+
+func TestMonitorReconciler_ResolvesHTTPBasicAuthSecret(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newMonitorReconciler(t)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-creds", Namespace: "default"},
+		StringData: map[string]string{"password": "hunter2"},
+	}
+	if err := k8sClient.Create(ctx, secret); err != nil {
+		t.Fatalf("create Secret: %v", err)
+	}
+	defer k8sClient.Delete(ctx, secret)
+
+	mon := &uptimekumaiov1alpha1.Monitor{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-with-auth", Namespace: "default"},
+		Spec: uptimekumaiov1alpha1.MonitorSpec{
+			Type: uptimekumaiov1alpha1.MonitorTypeHTTP,
+			HTTP: &uptimekumaiov1alpha1.HTTPMonitorSpec{
+				URL: "https://example.com/", AuthMethod: "basic", BasicAuthUsername: "svc-account",
+				BasicAuthPasswordSecretRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "web-creds"}, Key: "password",
+				},
+			},
+		},
+	}
+	if err := k8sClient.Create(ctx, mon); err != nil {
+		t.Fatalf("create Monitor: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mon.Name, Namespace: mon.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, mon)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	updated := &uptimekumaiov1alpha1.Monitor{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, updated); err != nil {
+		t.Fatalf("get Monitor: %v", err)
+	}
+	id, err := strconv.ParseInt(updated.Status.MonitorID, 10, 64)
+	if err != nil {
+		t.Fatalf("status.monitorID %q is not an integer: %v", updated.Status.MonitorID, err)
+	}
+	spec := fake.Monitors[id]
+	if spec.HTTP == nil || spec.HTTP.BasicAuthPassword != "hunter2" {
+		t.Errorf("HTTP.BasicAuthPassword = %q, want %q", spec.HTTP.BasicAuthPassword, "hunter2")
+	}
+}
+
+func TestMonitorReconciler_MissingSecretFailsReconcile(t *testing.T) {
+	ctx := context.Background()
+	r, _ := newMonitorReconciler(t)
+
+	mon := &uptimekumaiov1alpha1.Monitor{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-bad-secret", Namespace: "default"},
+		Spec: uptimekumaiov1alpha1.MonitorSpec{
+			Type: uptimekumaiov1alpha1.MonitorTypeHTTP,
+			HTTP: &uptimekumaiov1alpha1.HTTPMonitorSpec{
+				URL: "https://example.com/", AuthMethod: "bearer",
+				BearerTokenSecretRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "does-not-exist"}, Key: "token",
+				},
+			},
+		},
+	}
+	if err := k8sClient.Create(ctx, mon); err != nil {
+		t.Fatalf("create Monitor: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mon.Name, Namespace: mon.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, mon)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err == nil {
+		t.Fatal("expected Reconcile to fail for a missing Secret")
+	}
+}
+
+// TestMonitorReconciler_SecretNeverLogged guards against a resolved secret
+// value ever reaching the controller's log output (e.g. via a stray
+// "value", pass, or spec-dump log call). It captures the logger's output
+// into a buffer via logf.IntoContext and asserts the plaintext password
+// never appears in it, reusing
+// TestMonitorReconciler_ResolvesHTTPBasicAuthSecret's Monitor/Secret setup.
+func TestMonitorReconciler_SecretNeverLogged(t *testing.T) {
+	var buf bytes.Buffer
+	log := zaplog.New(zaplog.WriteTo(&buf), zaplog.UseDevMode(true))
+	ctx := logf.IntoContext(context.Background(), log)
+
+	r, _ := newMonitorReconciler(t)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-creds-logcheck", Namespace: "default"},
+		StringData: map[string]string{"password": "hunter2"},
+	}
+	if err := k8sClient.Create(ctx, secret); err != nil {
+		t.Fatalf("create Secret: %v", err)
+	}
+	defer k8sClient.Delete(ctx, secret)
+
+	mon := &uptimekumaiov1alpha1.Monitor{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-with-auth-logcheck", Namespace: "default"},
+		Spec: uptimekumaiov1alpha1.MonitorSpec{
+			Type: uptimekumaiov1alpha1.MonitorTypeHTTP,
+			HTTP: &uptimekumaiov1alpha1.HTTPMonitorSpec{
+				URL: "https://example.com/", AuthMethod: "basic", BasicAuthUsername: "svc-account",
+				BasicAuthPasswordSecretRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "web-creds-logcheck"}, Key: "password",
+				},
+			},
+		},
+	}
+	if err := k8sClient.Create(ctx, mon); err != nil {
+		t.Fatalf("create Monitor: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mon.Name, Namespace: mon.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, mon)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if bytes.Contains(buf.Bytes(), []byte("hunter2")) {
+		t.Errorf("log output contains the plaintext secret value:\n%s", buf.String())
 	}
 }

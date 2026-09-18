@@ -92,6 +92,37 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	desiredSpec.NotificationIDs = notificationIDs
 	desiredSpec.GroupID = groupID
 
+	if mon.Spec.HTTP != nil && desiredSpec.HTTP != nil {
+		pass, err := resolveSecret(ctx, r.Client, mon.Namespace, mon.Spec.HTTP.BasicAuthPasswordSecretRef)
+		if err != nil {
+			recordSyncFailure(r.Recorder, mon, err)
+			return ctrl.Result{}, err
+		}
+		desiredSpec.HTTP.BasicAuthPassword = pass
+
+		token, err := resolveSecret(ctx, r.Client, mon.Namespace, mon.Spec.HTTP.BearerTokenSecretRef)
+		if err != nil {
+			recordSyncFailure(r.Recorder, mon, err)
+			return ctrl.Result{}, err
+		}
+		desiredSpec.HTTP.BearerToken = token
+
+		clientSecret, err := resolveSecret(ctx, r.Client, mon.Namespace, mon.Spec.HTTP.OAuthClientSecretRef)
+		if err != nil {
+			recordSyncFailure(r.Recorder, mon, err)
+			return ctrl.Result{}, err
+		}
+		desiredSpec.HTTP.OAuthClientSecret = clientSecret
+	}
+	if mon.Spec.Gamedig != nil && desiredSpec.Gamedig != nil {
+		token, err := resolveSecret(ctx, r.Client, mon.Namespace, mon.Spec.Gamedig.TokenSecretRef)
+		if err != nil {
+			recordSyncFailure(r.Recorder, mon, err)
+			return ctrl.Result{}, err
+		}
+		desiredSpec.Gamedig.Token = token
+	}
+
 	if existingID != 0 && mon.Status.ObservedGeneration == mon.Generation {
 		log.V(1).Info("desired configuration unchanged since last sync, checking Kuma for drift", "monitorID", existingID)
 		liveSpecs, err := r.Kuma.ExistingSpecs(ctx)
