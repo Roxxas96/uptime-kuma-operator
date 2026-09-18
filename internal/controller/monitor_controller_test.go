@@ -540,6 +540,47 @@ func TestMonitorReconciler_UnresolvableNotificationFailsReconcile(t *testing.T) 
 	}
 }
 
+func TestMonitorReconciler_AppliesDefaultTagsEvenWithoutOwnTags(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newMonitorReconciler(t)
+	r.DefaultTags = []string{"k8s"}
+
+	mon := &uptimekumaiov1alpha1.Monitor{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-no-own-tags", Namespace: "default"},
+		Spec: uptimekumaiov1alpha1.MonitorSpec{
+			Type: uptimekumaiov1alpha1.MonitorTypePing,
+			Ping: &uptimekumaiov1alpha1.PingMonitorSpec{Host: "10.0.0.1"},
+		},
+	}
+	if err := k8sClient.Create(ctx, mon); err != nil {
+		t.Fatalf("create Monitor: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mon.Name, Namespace: mon.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, mon)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	updated := &uptimekumaiov1alpha1.Monitor{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, updated); err != nil {
+		t.Fatalf("get Monitor: %v", err)
+	}
+	id, err := strconv.ParseInt(updated.Status.MonitorID, 10, 64)
+	if err != nil {
+		t.Fatalf("status.monitorID %q is not an integer: %v", updated.Status.MonitorID, err)
+	}
+	if _, ok := fake.TagIDs["k8s"]; !ok {
+		t.Error("default tag k8s was not auto-created")
+	}
+	if len(fake.MonitorTags[id]) != 1 {
+		t.Errorf("MonitorTags[id] = %v, want the 1 default tag applied even though the Monitor itself declares none", fake.MonitorTags[id])
+	}
+}
+
 func TestMonitorReconciler_SyncsTags(t *testing.T) {
 	ctx := context.Background()
 	r, fake := newMonitorReconciler(t)

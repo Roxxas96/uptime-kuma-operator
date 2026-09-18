@@ -56,6 +56,10 @@ the full design.
    detail — what triggered a reconcile and which decision branch was taken
    (skip, full sync, drift correction, etc).
 
+   Set `--set defaultTags={k8s,managed}` to apply tag names to every
+   monitor the operator manages, in addition to whatever tags that
+   monitor's own resource specifies. Empty by default.
+
    Phase 1 monitor configuration (description, timeouts, TLS options,
    notification toggles, custom headers/body, and more) is available via
    both annotations (HTTP-applicable fields only — see the annotation

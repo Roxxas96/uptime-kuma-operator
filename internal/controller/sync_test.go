@@ -439,3 +439,33 @@ func TestSyncTags_EmptyClearsExistingTags(t *testing.T) {
 		t.Errorf("MonitorTags[id] = %v, want empty — tags are fully declarative, so omitting them clears any existing ones", fake.MonitorTags[id])
 	}
 }
+
+func TestMergeTags_UnionsAndDedupes(t *testing.T) {
+	got := mergeTags([]string{"k8s", "managed"}, []string{"managed", "prod"})
+	want := []string{"k8s", "managed", "prod"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mergeTags = %v, want %v", got, want)
+	}
+}
+
+func TestMergeTags_NoDefaultsReturnsSpecificUnchanged(t *testing.T) {
+	got := mergeTags(nil, []string{"prod"})
+	want := []string{"prod"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mergeTags = %v, want %v", got, want)
+	}
+}
+
+func TestMergeTags_NoSpecificReturnsDefaultsOnly(t *testing.T) {
+	got := mergeTags([]string{"k8s"}, nil)
+	want := []string{"k8s"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mergeTags = %v, want %v", got, want)
+	}
+}
+
+func TestMergeTags_BothEmptyReturnsEmpty(t *testing.T) {
+	if got := mergeTags(nil, nil); len(got) != 0 {
+		t.Errorf("mergeTags = %v, want empty", got)
+	}
+}

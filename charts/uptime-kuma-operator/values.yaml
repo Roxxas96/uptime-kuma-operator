@@ -24,3 +24,8 @@ driftCheckInterval: 30s
 # per-reconcile detail (what triggered a reconcile, which decision branch
 # was taken) on top of the always-on create/update/delete action logs.
 logLevel: info
+
+# Tag names applied to every monitor the operator manages, in addition to
+# whatever tags that monitor's own resource specifies (annotation or
+# Monitor CRD spec.tags). Empty by default. e.g. ["k8s", "managed"]
+defaultTags: []

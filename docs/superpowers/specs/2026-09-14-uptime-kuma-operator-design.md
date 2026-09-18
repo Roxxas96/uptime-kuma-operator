@@ -89,6 +89,7 @@ WATCH_ALL=false                  # true = watch every namespace (namespace scope
 OPT_IN_BY_DEFAULT=false          # true = sync everything not explicitly opted out
 DRIFT_CHECK_INTERVAL=30s         # Go duration string; how often to re-check Kuma for out-of-band deletions
 LOG_LEVEL=info                   # debug | info | warn | error
+DEFAULT_TAGS=                    # comma-separated; applied to every monitor in addition to its own tags
 ```
 
 `WATCH_ALL` and `OPT_IN_BY_DEFAULT` are deliberately independent: `WATCH_ALL`
@@ -99,8 +100,8 @@ a resource from needing `uptime-kuma.io/enabled=true`. Only
 `OPT_IN_BY_DEFAULT` controls that.
 
 Changing `WATCH_NAMESPACES`, `WATCH_ALL`, `OPT_IN_BY_DEFAULT`,
-`DRIFT_CHECK_INTERVAL`, or `LOG_LEVEL` requires a pod restart (no
-hot-reload watcher) — acceptable since these change rarely.
+`DRIFT_CHECK_INTERVAL`, `LOG_LEVEL`, or `DEFAULT_TAGS` requires a pod
+restart (no hot-reload watcher) — acceptable since these change rarely.
 
 Startup fails fast (non-zero exit, no retry) if Kuma credentials are
 invalid — there's no point running controllers that can never sync.

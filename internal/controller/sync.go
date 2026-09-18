@@ -331,6 +331,32 @@ func syncTags(ctx context.Context, kc kuma.Client, monitorID int64, tagNames []s
 	return kc.SetMonitorTags(ctx, monitorID, ids)
 }
 
+// mergeTags unions defaults (operator-wide tags configured via DEFAULT_TAGS)
+// with specific (a single resource's own tags annotation/CRD field),
+// deduplicating by name so a tag listed in both isn't resolved/created
+// twice. Order is defaults-first, then specific — cosmetic only, since
+// syncTags resolves names to IDs and Kuma tracks tag associations as a set.
+func mergeTags(defaults, specific []string) []string {
+	if len(defaults) == 0 {
+		return specific
+	}
+	seen := make(map[string]bool, len(defaults)+len(specific))
+	merged := make([]string, 0, len(defaults)+len(specific))
+	for _, name := range defaults {
+		if !seen[name] {
+			seen[name] = true
+			merged = append(merged, name)
+		}
+	}
+	for _, name := range specific {
+		if !seen[name] {
+			seen[name] = true
+			merged = append(merged, name)
+		}
+	}
+	return merged
+}
+
 // recordSyncFailure emits a Warning Event for a failed Kuma sync, as required
 // by the design spec's error-handling section. It tolerates a nil recorder so
 // reconcilers stay usable without a manager.

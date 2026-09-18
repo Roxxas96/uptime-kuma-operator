@@ -230,6 +230,38 @@ func TestLoad_LogLevelRejectsInvalidValue(t *testing.T) {
 	}
 }
 
+func TestLoad_DefaultTagsEmptyWhenUnset(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":      "https://kuma.example.com",
+		"KUMA_USERNAME": "admin",
+		"KUMA_PASSWORD": "secret",
+		"POD_NAMESPACE": "default",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.DefaultTags) != 0 {
+		t.Errorf("DefaultTags = %v, want empty", cfg.DefaultTags)
+	}
+}
+
+func TestLoad_DefaultTagsParsesAndTrimsList(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":      "https://kuma.example.com",
+		"KUMA_USERNAME": "admin",
+		"KUMA_PASSWORD": "secret",
+		"POD_NAMESPACE": "default",
+		"DEFAULT_TAGS":  "k8s, managed,, production",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{"k8s", "managed", "production"}
+	if !reflect.DeepEqual(cfg.DefaultTags, want) {
+		t.Errorf("DefaultTags = %v, want %v (blank entries trimmed)", cfg.DefaultTags, want)
+	}
+}
+
 func TestLoad_MissingKumaURL(t *testing.T) {
 	_, err := Load(envMap(map[string]string{"KUMA_USERNAME": "a", "KUMA_PASSWORD": "b"}))
 	if err == nil {
