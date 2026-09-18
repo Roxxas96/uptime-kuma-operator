@@ -29,3 +29,39 @@ spec:
     cacheBust: false
     expiryNotification: true
     domainExpiryNotification: true
+---
+apiVersion: uptime-kuma.io/v1alpha1
+kind: Monitor
+metadata:
+  name: http-auth-sample
+spec:
+  type: HTTP
+  name: "Sample HTTP Monitor with Phase 2 fields"
+  interval: 60
+  description: "Example showing Phase 2 referenced fields and HTTP basic auth"
+  notifications:
+    - email-alerts
+    - slack-oncall
+  group: production-web
+  proxy: 1
+  tags:
+    - production
+    - customer-facing
+  http:
+    url: https://example.com/health
+    authMethod: basic
+    basicAuthUsername: monitoring-user
+    basicAuthPasswordSecretRef:
+      name: http-auth-sample-credentials
+      key: password
+---
+# The Secret referenced by http-auth-sample above. Create it separately,
+# in the same namespace as the Monitor CR — the operator does not create
+# or manage this Secret.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: http-auth-sample-credentials
+type: Opaque
+stringData:
+  password: correct-horse-battery-staple
