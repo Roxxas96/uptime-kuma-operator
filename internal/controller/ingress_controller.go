@@ -135,6 +135,13 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			recordSyncFailure(r.Recorder, ing, err)
 			return ctrl.Result{}, err
 		}
+		// Persist the monitor IDs *before* syncing tags: the monitors already
+		// exist in Kuma at this point, so a tag-sync failure that skipped this
+		// write would leave the next reconcile with no record of them and
+		// upsert duplicates with id=0.
+		if err := persistMonitorIDs(ctx, r.Client, ing, newIDs, true, hash); err != nil {
+			return ctrl.Result{}, err
+		}
 		for _, idStr := range newIDs {
 			id, err := strconv.ParseInt(idStr, 10, 64)
 			if err != nil {
@@ -145,13 +152,17 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				return ctrl.Result{}, err
 			}
 		}
-		return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, persistMonitorIDs(ctx, r.Client, ing, newIDs, true, hash)
+		return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 	}
 
 	log.V(1).Info("desired configuration changed, syncing", "oldHash", annotations.ParseSyncedHash(ing.Annotations), "newHash", hash, "hosts", len(desired))
 	newIDs, err := syncMonitors(ctx, r.Kuma, desired, existingIDs)
 	if err != nil {
 		recordSyncFailure(r.Recorder, ing, err)
+		return ctrl.Result{}, err
+	}
+	// Persist first, sync tags second — see the drift-correction branch above.
+	if err := persistMonitorIDs(ctx, r.Client, ing, newIDs, true, hash); err != nil {
 		return ctrl.Result{}, err
 	}
 	for _, idStr := range newIDs {
@@ -165,7 +176,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, persistMonitorIDs(ctx, r.Client, ing, newIDs, true, hash)
+	return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 }
 
 func (r *IngressReconciler) SetupWithManager(mgr ctrl.Manager) error {

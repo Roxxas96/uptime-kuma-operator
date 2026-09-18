@@ -560,3 +560,38 @@ func TestEquivalent_DetectsDrift_HTTPAuthFields(t *testing.T) {
 		t.Error("Equivalent(base, changedToken) = true, want false")
 	}
 }
+
+// breml's HTTP.MarshalJSON always emits oauth_auth_method, so the operator
+// has to send the value Kuma's OAuth2-CC form requires — "" is rejected
+// there. kuma.HTTPSpec has no field for it (nothing to round-trip or
+// compare), it's purely what gets sent on the wire.
+func TestToBremlMonitor_HTTP_OAuthAuthMethod(t *testing.T) {
+	tests := []struct {
+		authMethod string
+		want       string
+	}{
+		{"oauth2-cc", "client_secret_basic"},
+		{"basic", ""},
+		{"bearer", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.authMethod, func(t *testing.T) {
+			got, err := ToBremlMonitor(0, MonitorSpec{
+				Type: TypeHTTP,
+				Name: "example",
+				HTTP: &HTTPSpec{URL: "https://example.com/", AuthMethod: tt.authMethod},
+			})
+			if err != nil {
+				t.Fatalf("ToBremlMonitor: %v", err)
+			}
+			http, ok := got.(*bremlmonitor.HTTP)
+			if !ok {
+				t.Fatalf("got %T, want *monitor.HTTP", got)
+			}
+			if http.OAuthAuthMethod != tt.want {
+				t.Errorf("OAuthAuthMethod for AuthMethod %q = %q, want %q", tt.authMethod, http.OAuthAuthMethod, tt.want)
+			}
+		})
+	}
+}

@@ -162,9 +162,12 @@ type MonitorSpec struct {
 	Group string `json:"group,omitempty"`
 	// Proxy is the numeric ID of an existing Kuma proxy to route checks
 	// through. Kuma proxies have no name field, so this is ID-based.
+	// +kubebuilder:validation:Minimum=1
 	Proxy int64 `json:"proxy,omitempty"`
 	// Tags lists tag names to apply to this monitor. A tag that doesn't
-	// already exist in Kuma is created automatically.
+	// already exist in Kuma is created automatically. This field is fully
+	// declarative: leaving it empty clears any tags currently on the
+	// monitor in Kuma, including ones added manually.
 	Tags []string `json:"tags,omitempty"`
 
 	HTTP    *HTTPMonitorSpec    `json:"http,omitempty"`

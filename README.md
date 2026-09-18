@@ -65,7 +65,9 @@ the full design.
 
    Phase 2 adds `tags`, `notifications`, `proxy`, and `group`, also
    available via annotation on `Ingress`/`HTTPRoute` (same table as
-   above) as well as on the Monitor CRD. HTTP Basic/Bearer/OAuth2-Client-
+   above) as well as on the Monitor CRD. Tags are fully declarative like
+   every other managed field: omitting them clears any tags currently on
+   the monitor in Kuma, including ones added manually. HTTP Basic/Bearer/OAuth2-Client-
    Credentials auth and the Gamedig `token` are Monitor-CRD-only, since
    each credential is a `SecretKeySelector` referencing a Kubernetes
    `Secret` in the same namespace — there's no sane way to represent that

@@ -73,6 +73,20 @@ func equalInt64Sets(a, b []int64) bool {
 	return true
 }
 
+// oauthAuthMethodFor returns the OAuth2 client-authentication method Kuma
+// requires alongside AuthMethod "oauth2-cc". Kuma exposes at most two
+// values here and the operator doesn't let users choose between them today
+// (no request for it exists) — client_secret_basic matches what a freshly
+// created Kuma monitor defaults to. breml's HTTP.MarshalJSON always emits
+// the oauth_auth_method key, so leaving it unset would send "", which
+// Kuma's OAuth2-CC form rejects.
+func oauthAuthMethodFor(authMethod string) string {
+	if authMethod == "oauth2-cc" {
+		return "client_secret_basic"
+	}
+	return ""
+}
+
 // ToBremlMonitor converts spec into the concrete breml monitor.Monitor
 // implementation for its type. id is the existing Kuma monitor ID (0 for a
 // not-yet-created monitor).
@@ -123,6 +137,7 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 				OAuthTokenURL:            spec.HTTP.OAuthTokenURL,
 				OAuthScopes:              spec.HTTP.OAuthScopes,
 				OAuthAudience:            spec.HTTP.OAuthAudience,
+				OAuthAuthMethod:          oauthAuthMethodFor(spec.HTTP.AuthMethod),
 			},
 		}, nil
 
@@ -201,9 +216,11 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 // FromBremlMonitor converts a monitor fetched from Kuma back into the
 // operator's own MonitorSpec representation, for drift comparison against
 // desired configuration via Equivalent. It populates only the fields
-// ToBremlMonitor sets — tags, notifications, active state,
-// and every other Kuma-side field are left for the user to manage directly
-// in Kuma and are never compared or overwritten by the operator.
+// ToBremlMonitor sets. Tags are the one operator-managed field NOT
+// represented here or in Equivalent — Kuma manages monitor-tag
+// associations via separate API calls outside a monitor's own
+// create/update payload, so they're reconciled by syncTags
+// (internal/controller/sync.go) instead, on every successful sync.
 func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 	spec := MonitorSpec{
 		Name:            base.Name,
@@ -300,12 +317,12 @@ func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 // Equivalent reports whether desired and live describe the same monitor
 // configuration, considering only the fields the operator manages (Name,
 // Interval, RetryInterval, MaxRetries, Description, ResendInterval, UpsideDown,
-// and the type-specific fields) — not every field Kuma tracks (tags,
-// notifications, active state, etc. are left for the user to manage directly
-// in Kuma). Both sides are normalized first, so a spec that leaves optional
-// fields unset still compares equal to one that spells out the same default
-// explicitly — which is what Kuma's live spec always does, never leaving a
-// field unset.
+// NotificationIDs, GroupID, ProxyID, and the type-specific fields). Tags are
+// the one operator-managed field intentionally excluded here — see
+// FromBremlMonitor's doc comment for why. Both sides are normalized first,
+// so a spec that leaves optional fields unset still compares equal to one
+// that spells out the same default explicitly — which is what Kuma's live
+// spec always does, never leaving a field unset.
 func Equivalent(desired, live MonitorSpec) bool {
 	d := normalizeSpec(desired)
 	live = normalizeSpec(live)

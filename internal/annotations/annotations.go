@@ -143,7 +143,13 @@ func ParseOverrides(ann map[string]string) (Overrides, error) {
 	}
 	if v := ann[Notifications]; v != "" {
 		for _, name := range strings.Split(v, ",") {
-			o.Notifications = append(o.Notifications, strings.TrimSpace(name))
+			// Skip empties: a trailing or doubled comma would otherwise
+			// resolve as a notification channel named "".
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			o.Notifications = append(o.Notifications, name)
 		}
 	}
 	o.Group = ann[Group]
@@ -152,7 +158,13 @@ func ParseOverrides(ann map[string]string) (Overrides, error) {
 	}
 	if v := ann[Tags]; v != "" {
 		for _, name := range strings.Split(v, ",") {
-			o.Tags = append(o.Tags, strings.TrimSpace(name))
+			// Skip empties: a trailing or doubled comma would otherwise
+			// create and attach a blank tag in Kuma.
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			o.Tags = append(o.Tags, name)
 		}
 	}
 	return o, nil
