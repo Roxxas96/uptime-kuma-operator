@@ -202,3 +202,23 @@ func TestParseOverrides_Tags(t *testing.T) {
 		t.Errorf("Tags = %v, want [env-prod team-platform]", ov.Tags)
 	}
 }
+
+// A trailing or doubled comma must not yield an empty-string entry: for
+// tags that would create and attach a blank tag in Kuma, and for
+// notifications it fails the reconcile with a confusing `channel ""
+// not found` error.
+func TestParseOverrides_SkipsEmptyCommaSeparatedEntries(t *testing.T) {
+	ov, err := ParseOverrides(map[string]string{
+		Tags:          "env-prod,,team-platform, ",
+		Notifications: "slack-prod,,email-oncall, ",
+	})
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	if !reflect.DeepEqual(ov.Tags, []string{"env-prod", "team-platform"}) {
+		t.Errorf("Tags = %v, want [env-prod team-platform] with no empty entries", ov.Tags)
+	}
+	if !reflect.DeepEqual(ov.Notifications, []string{"slack-prod", "email-oncall"}) {
+		t.Errorf("Notifications = %v, want [slack-prod email-oncall] with no empty entries", ov.Notifications)
+	}
+}

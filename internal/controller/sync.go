@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -248,14 +249,25 @@ func resolveReferences(ctx context.Context, kc kuma.Client, notificationNames []
 		if err != nil {
 			return nil, nil, fmt.Errorf("resolve notifications: %w", err)
 		}
+		// Dedupe and sort: Kuma stores a monitor's notification associations
+		// as a set, so a repeated name ([1,1]) would never compare equal to
+		// what Kuma returns ([1]) and would re-Upsert forever; and a stable
+		// order keeps desiredHash from changing when the same names are
+		// merely reordered.
+		seen := make(map[int64]bool, len(notificationNames))
 		notificationIDs = make([]int64, 0, len(notificationNames))
 		for _, name := range notificationNames {
 			id, ok := known[name]
 			if !ok {
 				return nil, nil, fmt.Errorf("notification channel %q not found in Kuma", name)
 			}
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
 			notificationIDs = append(notificationIDs, id)
 		}
+		sort.Slice(notificationIDs, func(i, j int) bool { return notificationIDs[i] < notificationIDs[j] })
 	}
 
 	var groupID *int64

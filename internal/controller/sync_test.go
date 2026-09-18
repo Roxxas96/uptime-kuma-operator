@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"reflect"
 	"strconv"
 	"testing"
 
@@ -347,6 +348,33 @@ func TestResolveReferences(t *testing.T) {
 	}
 }
 
+// Kuma stores notification associations as a set, so a duplicated name must
+// not produce a duplicated ID: [1,1] would never compare equal to the [1]
+// Kuma returns, re-Upserting (and restarting the check timer) forever. The
+// sort keeps desiredHash stable when the same names are merely reordered.
+func TestResolveReferences_DedupesAndSortsNotificationIDs(t *testing.T) {
+	fake := kuma.NewFakeClient()
+	fake.NotificationIDs = map[string]int64{"slack-prod": 7, "email-oncall": 2}
+
+	notificationIDs, _, err := resolveReferences(context.Background(), fake,
+		[]string{"slack-prod", "email-oncall", "slack-prod"}, "")
+	if err != nil {
+		t.Fatalf("resolveReferences: %v", err)
+	}
+	if !reflect.DeepEqual(notificationIDs, []int64{2, 7}) {
+		t.Errorf("notificationIDs = %v, want [2 7] (deduplicated and sorted)", notificationIDs)
+	}
+
+	reordered, _, err := resolveReferences(context.Background(), fake,
+		[]string{"slack-prod", "email-oncall"}, "")
+	if err != nil {
+		t.Fatalf("resolveReferences (reordered): %v", err)
+	}
+	if !reflect.DeepEqual(reordered, notificationIDs) {
+		t.Errorf("reordered names resolved to %v, want the same %v — order must not affect the result", reordered, notificationIDs)
+	}
+}
+
 func TestResolveReferences_UnknownNotificationErrors(t *testing.T) {
 	fake := kuma.NewFakeClient()
 	_, _, err := resolveReferences(context.Background(), fake, []string{"does-not-exist"}, "")
@@ -392,15 +420,22 @@ func TestSyncTags_CreatesMissingTagsAndApplies(t *testing.T) {
 	}
 }
 
-func TestSyncTags_NoTagsIsNoop(t *testing.T) {
+func TestSyncTags_EmptyClearsExistingTags(t *testing.T) {
 	ctx := context.Background()
 	fake := kuma.NewFakeClient()
 	id, _ := fake.Upsert(ctx, 0, kuma.MonitorSpec{Type: kuma.TypeHTTP, Name: "web", HTTP: &kuma.HTTPSpec{URL: "https://a"}})
+
+	if err := syncTags(ctx, fake, id, []string{"prod"}); err != nil {
+		t.Fatalf("syncTags (seed): %v", err)
+	}
+	if len(fake.MonitorTags[id]) == 0 {
+		t.Fatalf("MonitorTags[id] = %v, want the seeded tag present before testing the empty-tags case", fake.MonitorTags[id])
+	}
 
 	if err := syncTags(ctx, fake, id, nil); err != nil {
 		t.Fatalf("syncTags: %v", err)
 	}
 	if len(fake.MonitorTags[id]) != 0 {
-		t.Errorf("MonitorTags[id] = %v, want empty", fake.MonitorTags[id])
+		t.Errorf("MonitorTags[id] = %v, want empty — tags are fully declarative, so omitting them clears any existing ones", fake.MonitorTags[id])
 	}
 }

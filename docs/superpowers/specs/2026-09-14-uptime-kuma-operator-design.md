@@ -130,7 +130,7 @@ Annotations apply only to HTTP-based monitors derived from `Ingress` and `HTTPRo
 | `uptime-kuma.io/domain-expiry-notification` | `"true"` / `"false"`. Domain expiry notifications. Default: `false`. |
 | `uptime-kuma.io/headers` | Opaque HTTP headers passthrough (same raw text the Kuma UI accepts). Optional. |
 | `uptime-kuma.io/body` | Opaque HTTP request body passthrough. Optional. |
-| `uptime-kuma.io/tags` | Comma-separated list of tag names. Auto-creates any tag that doesn't already exist in Kuma. |
+| `uptime-kuma.io/tags` | Comma-separated list of tag names. Auto-creates any tag that doesn't already exist in Kuma. Fully declarative like every other managed field: omitting this annotation clears any tags currently on the monitor in Kuma, including ones added manually. |
 | `uptime-kuma.io/notifications` | Comma-separated list of Kuma notification channel names. Every name must already exist in Kuma — a missing one is a hard reconcile error, never silently skipped. |
 | `uptime-kuma.io/proxy` | Kuma proxy ID (integer). |
 | `uptime-kuma.io/group` | Kuma monitor group name. Must already exist in Kuma — missing is a hard reconcile error, same as notifications. |

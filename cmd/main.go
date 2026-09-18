@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"go.uber.org/zap/zapcore"
+	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
@@ -12,6 +13,7 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -65,7 +67,18 @@ func main() {
 
 	restCfg := ctrl.GetConfigOrDie()
 
-	mgrOpts := ctrl.Options{Scheme: scheme}
+	// Secrets are read one-by-one by name (resolveSecret), never listed. Left
+	// cached, the first credential ref would start a cluster- (or namespace-)
+	// wide Secret LIST+WATCH held in memory for the process lifetime; reads go
+	// straight to the API server instead.
+	mgrOpts := ctrl.Options{
+		Scheme: scheme,
+		Client: client.Options{
+			Cache: &client.CacheOptions{
+				DisableFor: []client.Object{&corev1.Secret{}},
+			},
+		},
+	}
 	if !cfg.WatchAll {
 		nsCache := map[string]cache.Config{}
 		for _, ns := range cfg.WatchNamespaces {

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"testing"
 
@@ -386,5 +387,58 @@ func TestHTTPRouteReconciler_DeletionRemovesMonitorAndFinalizer(t *testing.T) {
 	}
 	if len(fake.Monitors) != 0 {
 		t.Errorf("expected monitor deleted after HTTPRoute deletion, got %d remaining", len(fake.Monitors))
+	}
+}
+
+// A tag-sync failure must not cost us the record of the monitors that were
+// just created in Kuma: without the monitor-ids annotation, the next
+// reconcile upserts with id=0 and leaks a duplicate monitor on every retry.
+func TestHTTPRouteReconciler_PersistsMonitorIDsDespiteTagSyncFailure(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newHTTPRouteReconciler(true)
+	fake.SetMonitorTagsErr = errors.New("boom")
+
+	route := &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-tag-sync-failure", Namespace: "default"},
+		Spec:       gatewayv1.HTTPRouteSpec{Hostnames: []gatewayv1.Hostname{"tagfail.example.com"}},
+	}
+	if err := k8sClient.Create(ctx, route); err != nil {
+		t.Fatalf("create HTTPRoute: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: route.Name, Namespace: route.Namespace}}
+	defer func() {
+		fake.SetMonitorTagsErr = nil
+		_ = k8sClient.Delete(ctx, route)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err == nil {
+		t.Fatal("expected Reconcile to fail when tag sync fails")
+	}
+	if len(fake.Monitors) != 1 {
+		t.Fatalf("expected exactly 1 monitor created despite the tag-sync failure, got %d", len(fake.Monitors))
+	}
+
+	updated := &gatewayv1.HTTPRoute{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, updated); err != nil {
+		t.Fatalf("get HTTPRoute: %v", err)
+	}
+	ids, err := annotations.ParseMonitorIDs(updated.Annotations)
+	if err != nil {
+		t.Fatalf("ParseMonitorIDs: %v", err)
+	}
+	if _, ok := ids["tagfail.example.com"]; !ok {
+		t.Fatalf("monitor-ids annotation missing host tagfail.example.com after tag-sync failure: %v", ids)
+	}
+
+	// A second reconcile, now that tag sync succeeds, must reuse the
+	// existing monitor rather than creating a duplicate — proving the
+	// persisted ID from the failed attempt above is what prevents the leak.
+	fake.SetMonitorTagsErr = nil
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("second Reconcile: %v", err)
+	}
+	if len(fake.Monitors) != 1 {
+		t.Errorf("expected still exactly 1 monitor after the retry succeeded, got %d (a duplicate was created)", len(fake.Monitors))
 	}
 }
