@@ -128,15 +128,18 @@ jobs:
 
       # Scan the pushed image for OS and Go-binary vulnerabilities —
       # govulncheck (pre-commit) only covers the Go module graph, not the
-      # distroless base image's OS packages. image-ref reuses meta's tags
-      # output (already correctly lowercased) rather than reconstructing
-      # the ref by hand.
+      # distroless base image's OS packages. image-ref pulls the first tag
+      # out of meta's json output (already correctly lowercased) rather
+      # than using the tags output directly — that one is a newline-
+      # terminated multi-line string designed for build-push-action's
+      # list input, and trivy-action fails to parse a ref with a trailing
+      # newline ("could not parse reference").
       # https://github.com/aquasecurity/trivy-action
       - name: Scan image for vulnerabilities
         if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ steps.meta.outputs.tags }}
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           format: sarif
           output: trivy-results.sarif
           severity: HIGH,CRITICAL
