@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -40,6 +41,17 @@ type Config struct {
 	// this is opt-in, cluster-operator-level configuration, not something
 	// any single managed resource controls.
 	DefaultTags []string
+	// LabelTagPatterns, when non-empty, turns on operator-wide label-tag
+	// inference: for every monitor the operator manages, a "key=value" Kuma
+	// tag is added for each label on the label-owning resource
+	// (Ingress/HTTPRoute/Monitor) whose key fully matches at least one of
+	// these patterns. Each raw pattern from LABEL_TAG_PATTERNS is compiled
+	// anchored (^(?:pattern)$), so a plain prefix filter is expressed as
+	// e.g. "team-.*". Patterns must not themselves contain a literal comma
+	// — LABEL_TAG_PATTERNS is comma-separated with no escaping, the same
+	// limitation DEFAULT_TAGS already has. Empty by default: the feature is
+	// entirely off unless at least one pattern is configured.
+	LabelTagPatterns []*regexp.Regexp
 }
 
 // validLogLevels are the accepted values for LOG_LEVEL, matching what
@@ -100,6 +112,20 @@ func Load(getenv func(string) string) (Config, error) {
 			if tag != "" {
 				cfg.DefaultTags = append(cfg.DefaultTags, tag)
 			}
+		}
+	}
+
+	if raw := getenv("LABEL_TAG_PATTERNS"); raw != "" {
+		for _, pattern := range strings.Split(raw, ",") {
+			pattern = strings.TrimSpace(pattern)
+			if pattern == "" {
+				continue
+			}
+			re, err := regexp.Compile("^(?:" + pattern + ")$")
+			if err != nil {
+				return Config{}, fmt.Errorf("config: LABEL_TAG_PATTERNS pattern %q is not a valid regex: %w", pattern, err)
+			}
+			cfg.LabelTagPatterns = append(cfg.LabelTagPatterns, re)
 		}
 	}
 
