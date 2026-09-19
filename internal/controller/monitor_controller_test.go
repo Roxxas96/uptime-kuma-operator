@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -753,5 +754,56 @@ func TestMonitorReconciler_SecretNeverLogged(t *testing.T) {
 
 	if bytes.Contains(buf.Bytes(), []byte("hunter2")) {
 		t.Errorf("log output contains the plaintext secret value:\n%s", buf.String())
+	}
+}
+
+func TestMonitorReconciler_AppliesLabelDerivedTags(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newMonitorReconciler(t)
+	r.LabelTagPatterns = []*regexp.Regexp{regexp.MustCompile(`^(?:team)$`)}
+
+	mon := &uptimekumaiov1alpha1.Monitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "web-with-label-tag", Namespace: "default",
+			Labels: map[string]string{"team": "platform", "other": "ignored"},
+		},
+		Spec: uptimekumaiov1alpha1.MonitorSpec{
+			Type: uptimekumaiov1alpha1.MonitorTypePing,
+			Ping: &uptimekumaiov1alpha1.PingMonitorSpec{Host: "10.0.0.1"},
+		},
+	}
+	if err := k8sClient.Create(ctx, mon); err != nil {
+		t.Fatalf("create Monitor: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mon.Name, Namespace: mon.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, mon)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	updated := &uptimekumaiov1alpha1.Monitor{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, updated); err != nil {
+		t.Fatalf("get Monitor: %v", err)
+	}
+	id, err := strconv.ParseInt(updated.Status.MonitorID, 10, 64)
+	if err != nil {
+		t.Fatalf("status.monitorID %q is not an integer: %v", updated.Status.MonitorID, err)
+	}
+	tagIDs := fake.MonitorTags[id]
+	if len(tagIDs) != 1 {
+		t.Fatalf("MonitorTags[id] = %v, want 1 entry (only \"team\" matches the pattern)", tagIDs)
+	}
+	name := ""
+	for tagName, tagID := range fake.TagIDs {
+		if tagID == tagIDs[0] {
+			name = tagName
+		}
+	}
+	if name != "team=platform" {
+		t.Errorf("inferred tag name = %q, want %q", name, "team=platform")
 	}
 }

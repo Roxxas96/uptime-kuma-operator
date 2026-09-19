@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -32,6 +33,10 @@ type MonitorReconciler struct {
 	// manages, in addition to whatever the Monitor's own spec.tags
 	// specifies. See sync.go's mergeTags doc comment.
 	DefaultTags []string
+	// LabelTagPatterns, when non-empty, turns on Phase 3's operator-wide
+	// label-tag inference for every monitor this reconciler manages. See
+	// sync.go's deriveLabelTags doc comment.
+	LabelTagPatterns []*regexp.Regexp
 }
 
 func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -138,7 +143,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				// Nothing changed and Kuma still has it configured the way
 				// we want — nothing to do, but check again later in case it's
 				// deleted or edited out-of-band.
-				if err := syncTags(ctx, r.Kuma, existingID, mergeTags(r.DefaultTags, mon.Spec.Tags)); err != nil {
+				if err := syncTags(ctx, r.Kuma, existingID, mergeTags(r.DefaultTags, mon.Spec.Tags, deriveLabelTags(mon.Labels, r.LabelTagPatterns))); err != nil {
 					recordSyncFailure(r.Recorder, mon, err)
 					return ctrl.Result{}, err
 				}
@@ -177,7 +182,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	if err := syncTags(ctx, r.Kuma, newID, mergeTags(r.DefaultTags, mon.Spec.Tags)); err != nil {
+	if err := syncTags(ctx, r.Kuma, newID, mergeTags(r.DefaultTags, mon.Spec.Tags, deriveLabelTags(mon.Labels, r.LabelTagPatterns))); err != nil {
 		recordSyncFailure(r.Recorder, mon, err)
 		return ctrl.Result{}, err
 	}

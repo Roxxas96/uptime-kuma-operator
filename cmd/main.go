@@ -98,6 +98,7 @@ func main() {
 	if err := (&controller.IngressReconciler{
 		Client: mgr.GetClient(), Kuma: kumaClient, OptInByDefault: cfg.OptInByDefault,
 		Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval, DefaultTags: cfg.DefaultTags,
+		LabelTagPatterns: cfg.LabelTagPatterns,
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create Ingress controller")
 		os.Exit(1)
@@ -105,7 +106,7 @@ func main() {
 
 	if err := (&controller.MonitorReconciler{
 		Client: mgr.GetClient(), Kuma: kumaClient, Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval,
-		DefaultTags: cfg.DefaultTags,
+		DefaultTags: cfg.DefaultTags, LabelTagPatterns: cfg.LabelTagPatterns,
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create Monitor controller")
 		os.Exit(1)
@@ -116,6 +117,7 @@ func main() {
 		if err := (&controller.HTTPRouteReconciler{
 			Client: mgr.GetClient(), Kuma: kumaClient, OptInByDefault: cfg.OptInByDefault,
 			Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval, DefaultTags: cfg.DefaultTags,
+			LabelTagPatterns: cfg.LabelTagPatterns,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create HTTPRoute controller")
 			os.Exit(1)
@@ -126,7 +128,7 @@ func main() {
 
 	log.Info("starting manager", "watchNamespaces", cfg.WatchNamespaces, "watchAll", cfg.WatchAll,
 		"optInByDefault", cfg.OptInByDefault, "driftCheckInterval", cfg.DriftCheckInterval, "logLevel", cfg.LogLevel,
-		"defaultTags", cfg.DefaultTags)
+		"defaultTags", cfg.DefaultTags, "labelTagPatternCount", len(cfg.LabelTagPatterns))
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Error(err, "manager exited with error")
 		os.Exit(1)

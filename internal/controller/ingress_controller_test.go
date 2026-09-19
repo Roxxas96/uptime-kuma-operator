@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strconv"
 	"testing"
 
@@ -741,5 +742,44 @@ func TestIngressReconciler_PersistsMonitorIDsDespiteTagSyncFailure(t *testing.T)
 	}
 	if len(fake.Monitors) != 1 {
 		t.Errorf("expected still exactly 1 monitor after the retry succeeded, got %d (a duplicate was created)", len(fake.Monitors))
+	}
+}
+
+func TestIngressReconciler_AppliesLabelDerivedTags(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newIngressReconciler(false)
+	r.LabelTagPatterns = []*regexp.Regexp{regexp.MustCompile(`^(?:team)$`)}
+
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "web-with-label-tag", Namespace: "default",
+			Labels:      map[string]string{"team": "platform"},
+			Annotations: map[string]string{annotations.Enabled: "true"},
+		},
+		Spec: networkingv1.IngressSpec{Rules: []networkingv1.IngressRule{{Host: "app.example.com"}}},
+	}
+	if err := k8sClient.Create(ctx, ing); err != nil {
+		t.Fatalf("create Ingress: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: ing.Name, Namespace: ing.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, ing)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if len(fake.Monitors) != 1 {
+		t.Fatalf("expected 1 monitor, got %d", len(fake.Monitors))
+	}
+	var id int64
+	for monID := range fake.Monitors {
+		id = monID
+	}
+	tagIDs := fake.MonitorTags[id]
+	if len(tagIDs) != 1 {
+		t.Errorf("MonitorTags[id] = %v, want 1 entry", tagIDs)
 	}
 }
