@@ -104,6 +104,9 @@ internal design.
 
 ## Development
 
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup (`mise install` +
+`pre-commit install`) and PR conventions.
+
 - `make test` runs unit tests and the `envtest`-backed controller suite.
 - `go test -tags=integration ./test/integration/...` runs the real-Kuma
   integration test against Uptime Kuma **2.x** (`github.com/breml/go-uptime-kuma-client`

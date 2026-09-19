@@ -1,0 +1,38 @@
+name: Bug report
+description: Something isn't working as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. For security
+        vulnerabilities, please use
+        [private vulnerability reporting](https://github.com/Roxxas96/uptime-kuma-operator/security/advisories/new)
+        instead of a public issue.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Chart version and/or image tag (`helm list`, `kubectl get deploy -o jsonpath='{.spec.template.spec.containers[0].image}'`)
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Helm values, the Ingress/HTTPRoute/Monitor resource involved, and any relevant operator logs (`kubectl logs -l app.kubernetes.io/instance=<release>`).
+    validations:
+      required: true

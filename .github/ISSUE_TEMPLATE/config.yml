@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Roxxas96/uptime-kuma-operator/security/advisories/new
+    about: Please report vulnerabilities privately rather than in a public issue.
+  - name: User guide
+    url: https://github.com/Roxxas96/uptime-kuma-operator/blob/main/docs/README.md
+    about: Annotations, the Monitor CRD, and troubleshooting.
