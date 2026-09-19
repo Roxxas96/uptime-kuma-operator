@@ -9,6 +9,7 @@ linters:
     - unused
     - unconvert
     - misspell
+    - gosec
   # revive is deliberately not enabled: its default ruleset requires a godoc
   # comment on every exported identifier, which conflicts with this project's
   # convention of commenting only where the WHY is non-obvious.

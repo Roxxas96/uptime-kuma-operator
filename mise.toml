@@ -1,11 +1,14 @@
 [tools]
 go = "1.27.1"
+# Deliberately left floating: a vulnerability scanner is only useful running
+# against the newest CVE database, unlike the dev tools below which are
+# pinned so CI and local runs don't drift out from under unrelated commits.
 "go:golang.org/x/vuln/cmd/govulncheck" = "latest"
-golangci-lint = "latest"
-helm = "latest"
-kubectl = "latest"
-kind = "latest"
-"pre-commit" = "latest"
+golangci-lint = "2.13.2"
+helm = "4.3.0"
+kubectl = "1.37.0"
+kind = "0.33.0"
+"pre-commit" = "4.6.2"
 
 [settings]
 experimental = true
