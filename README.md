@@ -3,8 +3,10 @@
 Syncs Uptime Kuma monitors from `Ingress` and `HTTPRoute` resources, and
 from a `Monitor` CRD for manually declared DNS/Gamedig/TCP/Ping monitors.
 
-See `docs/superpowers/specs/2026-09-14-uptime-kuma-operator-design.md` for
-the full design.
+See **[`docs/README.md`](docs/README.md)** for the full user guide
+(annotations, the Monitor CRD, tags/notifications, troubleshooting), or
+`docs/superpowers/specs/2026-09-14-uptime-kuma-operator-design.md` for the
+internal design.
 
 ## Quick start
 
