@@ -70,3 +70,10 @@ repos:
         language: system
         pass_filenames: false
         files: '^charts/uptime-kuma-operator/'
+
+      - id: helm-rbac-test
+        name: chart RBAC rendering (per-namespace Role vs watchAll ClusterRole)
+        entry: bash charts/uptime-kuma-operator/templates/tests/rbac_test.sh
+        language: system
+        pass_filenames: false
+        files: '^charts/uptime-kuma-operator/'
