@@ -275,3 +275,72 @@ func TestLoad_MissingCredentials(t *testing.T) {
 		t.Fatal("expected error for missing credentials, got nil")
 	}
 }
+
+func TestLoad_LabelTagPatternsEmptyWhenUnset(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":      "https://kuma.example.com",
+		"KUMA_USERNAME": "admin",
+		"KUMA_PASSWORD": "secret",
+		"POD_NAMESPACE": "default",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.LabelTagPatterns) != 0 {
+		t.Errorf("LabelTagPatterns = %v, want empty", cfg.LabelTagPatterns)
+	}
+}
+
+func TestLoad_LabelTagPatternsParsesAndAnchorsPatterns(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":           "https://kuma.example.com",
+		"KUMA_USERNAME":      "admin",
+		"KUMA_PASSWORD":      "secret",
+		"POD_NAMESPACE":      "default",
+		"LABEL_TAG_PATTERNS": "team, env-.*",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.LabelTagPatterns) != 2 {
+		t.Fatalf("LabelTagPatterns = %v, want 2 compiled patterns", cfg.LabelTagPatterns)
+	}
+	if !cfg.LabelTagPatterns[0].MatchString("team") {
+		t.Error(`LabelTagPatterns[0] ("team") should match "team"`)
+	}
+	if cfg.LabelTagPatterns[0].MatchString("my-team") {
+		t.Error(`LabelTagPatterns[0] ("team") should NOT match "my-team" — patterns must be anchored`)
+	}
+	if !cfg.LabelTagPatterns[1].MatchString("env-prod") {
+		t.Error(`LabelTagPatterns[1] ("env-.*") should match "env-prod"`)
+	}
+}
+
+func TestLoad_LabelTagPatternsInvalidRegexFails(t *testing.T) {
+	_, err := Load(envMap(map[string]string{
+		"KUMA_URL":           "https://kuma.example.com",
+		"KUMA_USERNAME":      "admin",
+		"KUMA_PASSWORD":      "secret",
+		"POD_NAMESPACE":      "default",
+		"LABEL_TAG_PATTERNS": "team-(",
+	}))
+	if err == nil {
+		t.Fatal("expected error for invalid regex, got nil")
+	}
+}
+
+func TestLoad_LabelTagPatternsSkipsBlankEntries(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":           "https://kuma.example.com",
+		"KUMA_USERNAME":      "admin",
+		"KUMA_PASSWORD":      "secret",
+		"POD_NAMESPACE":      "default",
+		"LABEL_TAG_PATTERNS": "team, , env",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.LabelTagPatterns) != 2 {
+		t.Errorf("LabelTagPatterns = %v, want 2 patterns (blank entry skipped)", cfg.LabelTagPatterns)
+	}
+}
