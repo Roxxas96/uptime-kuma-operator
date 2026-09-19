@@ -2,7 +2,7 @@ apiVersion: v2
 name: uptime-kuma-operator
 description: Syncs Uptime Kuma monitors from Ingress, HTTPRoute, and a Monitor CRD
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "main"
 kubeVersion: ">=1.23.0-0"
 keywords:
