@@ -90,6 +90,7 @@ OPT_IN_BY_DEFAULT=false          # true = sync everything not explicitly opted o
 DRIFT_CHECK_INTERVAL=30s         # Go duration string; how often to re-check Kuma for out-of-band deletions
 LOG_LEVEL=info                   # debug | info | warn | error
 DEFAULT_TAGS=                    # comma-separated; applied to every monitor in addition to its own tags
+LABEL_TAG_PATTERNS=              # comma-separated regexes (anchored); labels matching are imported as "key=value" tags
 ```
 
 `WATCH_ALL` and `OPT_IN_BY_DEFAULT` are deliberately independent: `WATCH_ALL`
@@ -100,8 +101,23 @@ a resource from needing `uptime-kuma.io/enabled=true`. Only
 `OPT_IN_BY_DEFAULT` controls that.
 
 Changing `WATCH_NAMESPACES`, `WATCH_ALL`, `OPT_IN_BY_DEFAULT`,
-`DRIFT_CHECK_INTERVAL`, `LOG_LEVEL`, or `DEFAULT_TAGS` requires a pod
-restart (no hot-reload watcher) — acceptable since these change rarely.
+`DRIFT_CHECK_INTERVAL`, `LOG_LEVEL`, `DEFAULT_TAGS`, or `LABEL_TAG_PATTERNS`
+requires a pod restart (no hot-reload watcher) — acceptable since these
+change rarely.
+
+### Label-derived tags (Phase 3)
+
+When `LABEL_TAG_PATTERNS` is configured, every monitor the operator
+manages also gets a `"key=value"` Kuma tag for each label on its source
+Ingress/HTTPRoute/Monitor whose key fully matches at least one pattern —
+in addition to `DEFAULT_TAGS` and that resource's own explicit tags. This
+is entirely operator-wide (no per-resource annotation); see
+`docs/superpowers/specs/2026-09-19-monitor-config-expansion-phase3-design.md`
+for the full design, including the tag-proliferation caveat: a pattern
+that matches a high-cardinality label creates one Kuma tag object per
+distinct value ever seen, and the operator never deletes an unused tag
+object (tags are global and shared across monitors) — choose patterns
+narrowly.
 
 Startup fails fast (non-zero exit, no retry) if Kuma credentials are
 invalid — there's no point running controllers that can never sync.

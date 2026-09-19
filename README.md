@@ -64,6 +64,14 @@ the full design.
    monitor the operator manages, in addition to whatever tags that
    monitor's own resource specifies. Empty by default.
 
+   Set `--set labelTagPatterns={team,env-.*}` to automatically add a
+   `"key=value"` tag for every label on a managed Ingress/HTTPRoute/Monitor
+   whose key fully matches one of these regex patterns (each pattern is
+   anchored, so a plain prefix filter reads as e.g. `"team-.*"`). Empty by
+   default — off until configured. See
+   `docs/superpowers/specs/2026-09-19-monitor-config-expansion-phase3-design.md`
+   for the full design and its tag-proliferation caveat.
+
    Phase 1 monitor configuration (description, timeouts, TLS options,
    notification toggles, custom headers/body, and more) is available via
    both annotations (HTTP-applicable fields only — see the annotation
