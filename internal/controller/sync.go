@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 
@@ -331,30 +332,47 @@ func syncTags(ctx context.Context, kc kuma.Client, monitorID int64, tagNames []s
 	return kc.SetMonitorTags(ctx, monitorID, ids)
 }
 
-// mergeTags unions defaults (operator-wide tags configured via DEFAULT_TAGS)
-// with specific (a single resource's own tags annotation/CRD field),
-// deduplicating by name so a tag listed in both isn't resolved/created
-// twice. Order is defaults-first, then specific — cosmetic only, since
-// syncTags resolves names to IDs and Kuma tracks tag associations as a set.
-func mergeTags(defaults, specific []string) []string {
-	if len(defaults) == 0 {
-		return specific
-	}
-	seen := make(map[string]bool, len(defaults)+len(specific))
-	merged := make([]string, 0, len(defaults)+len(specific))
-	for _, name := range defaults {
-		if !seen[name] {
-			seen[name] = true
-			merged = append(merged, name)
-		}
-	}
-	for _, name := range specific {
-		if !seen[name] {
-			seen[name] = true
-			merged = append(merged, name)
+// mergeTags unions any number of tag-name sources — operator-wide
+// DEFAULT_TAGS, a resource's own explicit tags, and (Phase 3)
+// label-derived tags — deduplicating by name so a tag listed in more than
+// one source isn't resolved/created twice. Order is source-order, first
+// occurrence wins — cosmetic only, since syncTags resolves names to IDs
+// and Kuma tracks tag associations as a set.
+func mergeTags(sources ...[]string) []string {
+	seen := make(map[string]bool)
+	var merged []string
+	for _, src := range sources {
+		for _, name := range src {
+			if !seen[name] {
+				seen[name] = true
+				merged = append(merged, name)
+			}
 		}
 	}
 	return merged
+}
+
+// deriveLabelTags returns the Kuma tag names derived from labels for
+// Phase 3's operator-wide label-tag inference: for every label whose key
+// fully matches at least one of patterns, "key=value" is included. patterns
+// are assumed already anchored (config.Load compiles them as ^(?:...)$) —
+// this function does no anchoring of its own. Order is unspecified; callers
+// that need determinism should sort, same as any other tag-name slice fed
+// into mergeTags/syncTags.
+func deriveLabelTags(labels map[string]string, patterns []*regexp.Regexp) []string {
+	if len(patterns) == 0 {
+		return nil
+	}
+	var tags []string
+	for key, value := range labels {
+		for _, pattern := range patterns {
+			if pattern.MatchString(key) {
+				tags = append(tags, key+"="+value)
+				break
+			}
+		}
+	}
+	return tags
 }
 
 // recordSyncFailure emits a Warning Event for a failed Kuma sync, as required

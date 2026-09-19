@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"reflect"
+	"regexp"
+	"sort"
 	"strconv"
 	"testing"
 
@@ -467,5 +469,55 @@ func TestMergeTags_NoSpecificReturnsDefaultsOnly(t *testing.T) {
 func TestMergeTags_BothEmptyReturnsEmpty(t *testing.T) {
 	if got := mergeTags(nil, nil); len(got) != 0 {
 		t.Errorf("mergeTags = %v, want empty", got)
+	}
+}
+
+func TestDeriveLabelTags_MatchesAnchoredPatterns(t *testing.T) {
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`^(?:team)$`),
+		regexp.MustCompile(`^(?:env-.*)$`),
+	}
+	labels := map[string]string{
+		"team":     "platform",
+		"env-tier": "prod",
+		"my-team":  "should-not-match", // "team" is anchored, must not match this
+	}
+	got := deriveLabelTags(labels, patterns)
+	sort.Strings(got)
+	want := []string{"env-tier=prod", "team=platform"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("deriveLabelTags = %v, want %v", got, want)
+	}
+}
+
+func TestDeriveLabelTags_NoPatternsIsEmpty(t *testing.T) {
+	got := deriveLabelTags(map[string]string{"team": "platform"}, nil)
+	if len(got) != 0 {
+		t.Errorf("deriveLabelTags with no patterns = %v, want empty", got)
+	}
+}
+
+func TestDeriveLabelTags_NoMatchingLabelsIsEmpty(t *testing.T) {
+	patterns := []*regexp.Regexp{regexp.MustCompile(`^(?:team)$`)}
+	got := deriveLabelTags(map[string]string{"other": "value"}, patterns)
+	if len(got) != 0 {
+		t.Errorf("deriveLabelTags with no matching labels = %v, want empty", got)
+	}
+}
+
+func TestDeriveLabelTags_EmptyLabelValue(t *testing.T) {
+	patterns := []*regexp.Regexp{regexp.MustCompile(`^(?:tier)$`)}
+	got := deriveLabelTags(map[string]string{"tier": ""}, patterns)
+	want := []string{"tier="}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("deriveLabelTags = %v, want %v", got, want)
+	}
+}
+
+func TestMergeTags_ThreeWayUnionAndDedup(t *testing.T) {
+	got := mergeTags([]string{"a", "b"}, []string{"b", "c"}, []string{"c", "d"})
+	want := []string{"a", "b", "c", "d"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mergeTags = %v, want %v", got, want)
 	}
 }
