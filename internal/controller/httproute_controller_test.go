@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strconv"
 	"testing"
 
@@ -492,5 +493,44 @@ func TestHTTPRouteReconciler_PersistsMonitorIDsDespiteTagSyncFailure(t *testing.
 	}
 	if len(fake.Monitors) != 1 {
 		t.Errorf("expected still exactly 1 monitor after the retry succeeded, got %d (a duplicate was created)", len(fake.Monitors))
+	}
+}
+
+func TestHTTPRouteReconciler_AppliesLabelDerivedTags(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newHTTPRouteReconciler(false)
+	r.LabelTagPatterns = []*regexp.Regexp{regexp.MustCompile(`^(?:team)$`)}
+
+	route := &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "web-with-label-tag", Namespace: "default",
+			Labels:      map[string]string{"team": "platform"},
+			Annotations: map[string]string{annotations.Enabled: "true"},
+		},
+		Spec: gatewayv1.HTTPRouteSpec{Hostnames: []gatewayv1.Hostname{"app.example.com"}},
+	}
+	if err := k8sClient.Create(ctx, route); err != nil {
+		t.Fatalf("create HTTPRoute: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: route.Name, Namespace: route.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, route)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if len(fake.Monitors) != 1 {
+		t.Fatalf("expected 1 monitor, got %d", len(fake.Monitors))
+	}
+	var id int64
+	for monID := range fake.Monitors {
+		id = monID
+	}
+	tagIDs := fake.MonitorTags[id]
+	if len(tagIDs) != 1 {
+		t.Errorf("MonitorTags[id] = %v, want 1 entry", tagIDs)
 	}
 }

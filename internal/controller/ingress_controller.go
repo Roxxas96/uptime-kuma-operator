@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -33,6 +34,10 @@ type IngressReconciler struct {
 	// manages, in addition to whatever the Ingress's own tags annotation
 	// specifies. See sync.go's mergeTags doc comment.
 	DefaultTags []string
+	// LabelTagPatterns, when non-empty, turns on Phase 3's operator-wide
+	// label-tag inference for every monitor this reconciler manages. See
+	// sync.go's deriveLabelTags doc comment.
+	LabelTagPatterns []*regexp.Regexp
 }
 
 func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -125,7 +130,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				if err != nil {
 					continue // already logged/handled by the surrounding sync logic
 				}
-				if err := syncTags(ctx, r.Kuma, id, mergeTags(r.DefaultTags, ov.Tags)); err != nil {
+				if err := syncTags(ctx, r.Kuma, id, mergeTags(r.DefaultTags, ov.Tags, deriveLabelTags(ing.Labels, r.LabelTagPatterns))); err != nil {
 					recordSyncFailure(r.Recorder, ing, err)
 					return ctrl.Result{}, err
 				}
@@ -151,7 +156,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			if err != nil {
 				continue // already logged/handled by the surrounding sync logic
 			}
-			if err := syncTags(ctx, r.Kuma, id, mergeTags(r.DefaultTags, ov.Tags)); err != nil {
+			if err := syncTags(ctx, r.Kuma, id, mergeTags(r.DefaultTags, ov.Tags, deriveLabelTags(ing.Labels, r.LabelTagPatterns))); err != nil {
 				recordSyncFailure(r.Recorder, ing, err)
 				return ctrl.Result{}, err
 			}
@@ -174,7 +179,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if err != nil {
 			continue // already logged/handled by the surrounding sync logic
 		}
-		if err := syncTags(ctx, r.Kuma, id, mergeTags(r.DefaultTags, ov.Tags)); err != nil {
+		if err := syncTags(ctx, r.Kuma, id, mergeTags(r.DefaultTags, ov.Tags, deriveLabelTags(ing.Labels, r.LabelTagPatterns))); err != nil {
 			recordSyncFailure(r.Recorder, ing, err)
 			return ctrl.Result{}, err
 		}
