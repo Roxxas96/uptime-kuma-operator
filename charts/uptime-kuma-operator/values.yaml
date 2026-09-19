@@ -4,8 +4,10 @@
 replicaCount: 1
 
 image:
-  repository: uptime-kuma-operator
-  tag: latest
+  repository: ghcr.io/roxxas96/uptime-kuma-operator
+  # Defaults to .Chart.AppVersion when unset, so a versioned install
+  # (--version 0.1.0) pulls the matching 0.1.0 image rather than floating.
+  tag: ""
   pullPolicy: IfNotPresent
 
 # Names of existing Secrets (docker-registry type) to pull the operator

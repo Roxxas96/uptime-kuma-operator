@@ -31,8 +31,8 @@ as values.
 | Key | Default | Description |
 |---|---|---|
 | `replicaCount` | `1` | Fixed at 1: no leader election, so >1 replica would race reconciles against Kuma. |
-| `image.repository` | `uptime-kuma-operator` | Manager image repository. |
-| `image.tag` | `latest` | Manager image tag. |
+| `image.repository` | `ghcr.io/roxxas96/uptime-kuma-operator` | Manager image repository. |
+| `image.tag` | `""` | Manager image tag; defaults to `.Chart.AppVersion` when unset. |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy. |
 | `imagePullSecrets` | `[]` | Existing docker-registry Secrets, e.g. `[{name: my-registry-secret}]`. |
 | `kuma.url` | `""` | Uptime Kuma base URL. Required. |
