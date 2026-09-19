@@ -1,10 +1,91 @@
+# Fixed at 1: the operator does not run leader election, so more than one
+# replica would reconcile concurrently and race writes to Kuma. Raising this
+# requires adding leader election first.
+replicaCount: 1
+
 image:
   repository: uptime-kuma-operator
   tag: latest
+  pullPolicy: IfNotPresent
 
 # Names of existing Secrets (docker-registry type) to pull the operator
 # image from a private registry. e.g. [{name: my-registry-secret}]
 imagePullSecrets: []
+
+serviceAccount:
+  # Whether a ServiceAccount should be created by the chart.
+  create: true
+  # Name of the ServiceAccount to use. If create is false, this must
+  # reference an existing ServiceAccount. If create is true and this is
+  # empty, a name is generated from the release name.
+  name: ""
+  # Annotations for the ServiceAccount, e.g. for cloud workload identity
+  # (IRSA, Workload Identity, etc.).
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+# Pod-level securityContext. Defaults satisfy the Kubernetes "restricted"
+# Pod Security Standard.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level securityContext. The image (distroless/static:nonroot)
+# already runs as UID 65532 with no shell, so readOnlyRootFilesystem is
+# safe — the operator writes nothing to disk.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Requests/limits for the manager container. Empty by default so the chart
+# doesn't impose limits on installs that haven't sized them; set explicitly
+# in production.
+resources: {}
+# resources:
+#   requests:
+#     cpu: 10m
+#     memory: 64Mi
+#   limits:
+#     memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Exposes the manager's metrics endpoint (plain HTTP, unauthenticated) via a
+# ClusterIP Service. Off by default since it widens what's reachable inside
+# the cluster; enable if you run Prometheus and want to scrape it.
+service:
+  enabled: false
+  port: 8080
+
+# Restricts the operator pod's egress via a NetworkPolicy. Off by default —
+# the Kuma URL is user-supplied and may be inside or outside the cluster, so
+# a safe default egress policy can't be inferred generically. When enabled,
+# DNS and the Kubernetes API server are always allowed; add extraEgress for
+# anything else the pod needs to reach (e.g. the Kuma instance).
+networkPolicy:
+  enabled: false
+  # kubeApiServerCIDR, when set, restricts API server egress to this CIDR
+  # (e.g. the control plane endpoint) instead of allowing all egress on
+  # port 443. Leave empty to allow all-destinations port 443/6443 egress,
+  # since the API server's in-cluster address varies by distribution.
+  kubeApiServerCIDR: ""
+  # extraEgress is appended as-is (list of NetworkPolicyEgressRule). Needed
+  # for anything besides DNS and the API server, most notably reaching
+  # kuma.url — e.g. an in-cluster Kuma Service, or 0.0.0.0/0 for an
+  # external one.
+  extraEgress: []
+  # extraIngress is appended as-is (list of NetworkPolicyIngressRule).
+  # Enabling networkPolicy blocks all inbound traffic by default; if
+  # service.enabled is also true, add a rule here allowing your Prometheus
+  # to reach the metrics port, or scraping will fail silently.
+  extraIngress: []
 
 kuma:
   url: ""

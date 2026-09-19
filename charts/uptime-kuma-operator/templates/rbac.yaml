@@ -1,3 +1,16 @@
+{{- /*
+  Security note: the "secrets" get rule below is intentionally broad — it
+  grants read access to any Secret (by name) in every watched namespace
+  (or cluster-wide under watchAll), because the operator resolves
+  HTTP-auth/Gamedig-token Secrets referenced by arbitrary Monitor/Ingress/
+  HTTPRoute resources whose names aren't known ahead of time, so RBAC
+  resourceNames can't scope this down generically. Secrets are never
+  listed or cached (see cmd/main.go), only fetched one-by-one by name, but
+  anyone who can create/edit a watched Ingress, HTTPRoute, or Monitor in
+  scope can make the operator read any Secret in that scope. Treat this
+  ServiceAccount's access as equivalent to Secret-read access across
+  whatever namespaces (or the whole cluster) it watches.
+*/ -}}
 {{- $rules := list
   (dict "apiGroups" (list "networking.k8s.io") "resources" (list "ingresses") "verbs" (list "get" "list" "watch" "update" "patch"))
   (dict "apiGroups" (list "gateway.networking.k8s.io") "resources" (list "httproutes") "verbs" (list "get" "list" "watch" "update" "patch"))
@@ -11,21 +24,25 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Release.Name }}
+  name: {{ include "uptime-kuma-operator.fullname" . }}
+  labels:
+    {{- include "uptime-kuma-operator.labels" . | nindent 4 }}
 rules:
 {{ toYaml $rules | indent 2 }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Release.Name }}
+  name: {{ include "uptime-kuma-operator.fullname" . }}
+  labels:
+    {{- include "uptime-kuma-operator.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ .Release.Name }}
+  name: {{ include "uptime-kuma-operator.fullname" . }}
 subjects:
   - kind: ServiceAccount
-    name: {{ .Release.Name }}
+    name: {{ include "uptime-kuma-operator.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 {{- else }}
 {{- /*
@@ -39,23 +56,27 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ $.Release.Name }}
+  name: {{ include "uptime-kuma-operator.fullname" $ }}
   namespace: {{ . }}
+  labels:
+    {{- include "uptime-kuma-operator.labels" $ | nindent 4 }}
 rules:
 {{ toYaml $rules | indent 2 }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ $.Release.Name }}
+  name: {{ include "uptime-kuma-operator.fullname" $ }}
   namespace: {{ . }}
+  labels:
+    {{- include "uptime-kuma-operator.labels" $ | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ $.Release.Name }}
+  name: {{ include "uptime-kuma-operator.fullname" $ }}
 subjects:
   - kind: ServiceAccount
-    name: {{ $.Release.Name }}
+    name: {{ include "uptime-kuma-operator.serviceAccountName" $ }}
     namespace: {{ $.Release.Namespace }}
 {{- end }}
 {{- end }}

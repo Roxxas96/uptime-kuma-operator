@@ -14,6 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -78,6 +79,7 @@ func main() {
 				DisableFor: []client.Object{&corev1.Secret{}},
 			},
 		},
+		HealthProbeBindAddress: ":8081",
 	}
 	if !cfg.WatchAll {
 		nsCache := map[string]cache.Config{}
@@ -90,6 +92,15 @@ func main() {
 	mgr, err := ctrl.NewManager(restCfg, mgrOpts)
 	if err != nil {
 		log.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		log.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		log.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
 

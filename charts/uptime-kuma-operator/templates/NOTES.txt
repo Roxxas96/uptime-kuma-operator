@@ -1,0 +1,23 @@
+uptime-kuma-operator has been installed.
+
+Release:    {{ .Release.Name }}
+Namespace:  {{ .Release.Namespace }}
+Scope:      {{ if .Values.watchAll }}cluster-wide (all namespaces){{ else }}{{ join ", " (default (list .Release.Namespace) .Values.watchNamespaces) }}{{ end }}
+
+Check the manager is running:
+
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Tail its logs:
+
+  kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/instance={{ .Release.Name }} -f
+
+{{- if .Values.watchAll }}
+
+NOTE: watchAll is true — the ServiceAccount holds a ClusterRole, including
+"get" on every Secret in the cluster (see templates/rbac.yaml for why).
+{{- else }}
+
+NOTE: the ServiceAccount can "get" any Secret in the namespace(s) above
+(see templates/rbac.yaml for why).
+{{- end }}

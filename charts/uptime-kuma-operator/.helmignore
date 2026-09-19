@@ -1,3 +1,13 @@
 .git
 .gitignore
 templates/tests/*.sh
+.DS_Store
+*.swp
+*.bak
+*.orig
+*.tmp
+.idea/
+.vscode/
+.editorconfig
+README.md.gotmpl
+ci/
