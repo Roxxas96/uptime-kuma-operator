@@ -4,6 +4,18 @@ Syncs Uptime Kuma monitors from Ingress, HTTPRoute, and a Monitor CRD.
 
 ## Installing
 
+Published releases are available as an OCI artifact — no `git clone` or
+`helm repo add` needed:
+
+```bash
+helm install my-release oci://ghcr.io/roxxas96/uptime-kuma-operator/charts/uptime-kuma-operator \
+  --version 0.1.0 \
+  --set kuma.url=https://kuma.example.com \
+  --set kuma.existingSecret=kuma-credentials
+```
+
+Or, from a checkout of this repo:
+
 ```bash
 helm install my-release charts/uptime-kuma-operator \
   --set kuma.url=https://kuma.example.com \

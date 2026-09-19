@@ -73,14 +73,19 @@ Two things happen automatically that are worth knowing about upfront:
    ```
 
 2. Install the chart. The `Monitor` CRD ships in the chart itself, so
-   Helm installs it automatically:
+   Helm installs it automatically. Published releases are available as an
+   OCI artifact — no clone needed:
 
    ```bash
-   helm install uptime-kuma-operator charts/uptime-kuma-operator \
+   helm install uptime-kuma-operator oci://ghcr.io/roxxas96/uptime-kuma-operator/charts/uptime-kuma-operator \
+     --version 0.1.0 \
      --set kuma.url=https://kuma.example.com \
      --set kuma.existingSecret=kuma-credentials \
      --set watchNamespaces={default}
    ```
+
+   (Or `charts/uptime-kuma-operator` in place of the `oci://...` URL if
+   you're installing from a checkout of this repo instead.)
 
 That's a working install. Everything else below is configuration you can
 layer on as needed — see the [chart README](../charts/uptime-kuma-operator/README.md)

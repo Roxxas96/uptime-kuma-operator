@@ -119,6 +119,21 @@ internal design.
   `make sync-chart-crds`, which copies the CRD into the chart's `crds/`
   directory. The two must stay byte-identical; never edit either by hand.
 
+## Releasing
+
+1. Bump `version` (and, if the app changed, leave `appVersion` — CI
+   resolves it from the tag) in `charts/uptime-kuma-operator/Chart.yaml`,
+   in the PR that includes the change.
+2. Tag the merge commit on `main` and push the tag: `git tag v0.1.0 &&
+   git push origin v0.1.0` (`vX.Y.Z`, or `vX.Y.Z-rcN` for a prerelease).
+3. CI's `release` job (`.github/workflows/ci.yml`) takes it from there:
+   it fails fast if `Chart.yaml`'s `version` doesn't match the tag,
+   otherwise it packages the chart, pushes it to
+   `oci://ghcr.io/roxxas96/uptime-kuma-operator/charts`, and creates the
+   GitHub Release with auto-generated notes and the packaged chart
+   attached. The Docker image (already built/signed by the `build` job
+   for the same tag) is tagged to match.
+
 ## Annotations
 
 See the design spec's "Annotation contract" section for the full list
