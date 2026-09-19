@@ -111,38 +111,6 @@ jobs:
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
 
-  bump:
-    runs-on: ubuntu-latest
-    # Only main pushes: checkout at a tag is a detached HEAD, so
-    # git-auto-commit-action below has nothing to push back to.
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ssh-key: ${{ secrets.BOT_SSH_KEY }}
-
-      # Extract metadata (tags, labels) for Docker
-      # https://github.com/docker/metadata-action
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
-      - name: Bump Version in Chart.yaml
-        run: |
-          sed -i '/appVersion:/c\appVersion: \"${{ steps.meta.outputs.version }}\"' charts/uptime-kuma-operator/Chart.yaml
-
-      - name: Commit Version Bump
-        uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: "build: [skip ci] bump version to ${{ steps.meta.outputs.version }}"
-          commit_options: "-a"
-          commit_author: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
-
   release:
     runs-on: ubuntu-latest
     # Not bump: bump never runs on a tag push (see its own if), and release
