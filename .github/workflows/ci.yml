@@ -43,6 +43,39 @@ jobs:
       - name: Verify generated CRDs are up to date
         run: git diff --exit-code -- config/crd/bases charts/uptime-kuma-operator/crds
 
+  # internal/kuma/client.go (the real Socket.IO-backed Client) is only
+  # exercised here — make test's unit/envtest suite above uses the fake.go
+  # test double instead, so without this job the layer that actually talks
+  # to Kuma would ship with zero automated verification.
+  integration-test:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    env:
+      KUMA_URL: http://localhost:3001
+      KUMA_USERNAME: admin
+      KUMA_PASSWORD: ci-integration-test-password
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v4
+      - name: Start Uptime Kuma
+        run: docker compose -f test/integration/docker-compose.yaml up -d
+      - name: Wait for Uptime Kuma to be ready
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf "$KUMA_URL" >/dev/null && exit 0
+            sleep 2
+          done
+          echo "::error::Uptime Kuma did not become ready in time"
+          exit 1
+      # bootstrapKuma (real_client_test.go) completes first-run setup itself
+      # via WithAutosetup — no manual provisioning needed.
+      - name: Run integration test
+        run: go test -tags=integration ./test/integration/... -v
+      - name: Tear down Uptime Kuma
+        if: always()
+        run: docker compose -f test/integration/docker-compose.yaml down -v
+
   build:
     runs-on: ubuntu-latest
     permissions:
@@ -155,7 +188,7 @@ jobs:
     runs-on: ubuntu-latest
     # Not bump: bump never runs on a tag push (see its own if), and release
     # already resolves its own app-version from the tag when packaging.
-    needs: [lint, test, build]
+    needs: [lint, test, integration-test, build]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
