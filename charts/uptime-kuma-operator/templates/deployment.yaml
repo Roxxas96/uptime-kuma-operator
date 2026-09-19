@@ -46,6 +46,8 @@ spec:
               value: {{ .Values.logLevel | quote }}
             - name: DEFAULT_TAGS
               value: {{ join "," .Values.defaultTags | quote }}
+            - name: LABEL_TAG_PATTERNS
+              value: {{ join "," .Values.labelTagPatterns | quote }}
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:

@@ -33,3 +33,13 @@ logLevel: info
 # whatever tags that monitor's own resource specifies (annotation or
 # Monitor CRD spec.tags). Empty by default. e.g. ["k8s", "managed"]
 defaultTags: []
+
+# labelTagPatterns lists regex patterns (see internal/config.Config's
+# LabelTagPatterns doc comment for exact matching semantics — each pattern
+# is anchored, so "team-.*" is a prefix filter). A label on a managed
+# Ingress/HTTPRoute/Monitor is imported as a "key=value" Kuma tag when its
+# key fully matches at least one pattern. Empty by default — label-tag
+# inference is entirely off until at least one pattern is configured. A
+# pattern must not contain a literal comma (patterns are comma-joined with
+# no escaping, same as defaultTags). e.g. ["team", "env-.*"]
+labelTagPatterns: []
