@@ -17,7 +17,7 @@ type DesiredMonitor struct {
 
 // IngressMonitors derives one DesiredMonitor per distinct, non-empty host
 // in ing.Spec.Rules. Scheme is "https" if the host is listed under
-// ing.Spec.TLS, else "http"; ov.Scheme, when set, overrides that.
+// ing.Spec.TLS, else "http"; ov.HTTP.Scheme, when set, overrides that.
 func IngressMonitors(ing *networkingv1.Ingress, ov annotations.Overrides) []DesiredMonitor {
 	tlsHosts := map[string]bool{}
 	for _, t := range ing.Spec.TLS {
@@ -38,8 +38,8 @@ func IngressMonitors(ing *networkingv1.Ingress, ov annotations.Overrides) []Desi
 		if tlsHosts[rule.Host] {
 			scheme = "https"
 		}
-		if ov.Scheme != "" {
-			scheme = ov.Scheme
+		if ov.HTTP.Scheme != "" {
+			scheme = ov.HTTP.Scheme
 		}
 
 		name := ov.Name

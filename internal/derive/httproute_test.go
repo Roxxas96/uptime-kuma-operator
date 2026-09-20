@@ -37,7 +37,7 @@ func TestHTTPRouteMonitors_SchemeOverrideToHTTP(t *testing.T) {
 		},
 	}
 
-	got := HTTPRouteMonitors(route, annotations.Overrides{Scheme: "http"})
+	got := HTTPRouteMonitors(route, annotations.Overrides{HTTP: annotations.HTTPOverrides{Scheme: "http"}})
 	if got[0].Spec.HTTP.URL != "http://app.example.com/" {
 		t.Errorf("URL = %q, want %q", got[0].Spec.HTTP.URL, "http://app.example.com/")
 	}
@@ -93,7 +93,7 @@ func TestHTTPRouteMonitors_PathOverride(t *testing.T) {
 		},
 	}
 
-	got := HTTPRouteMonitors(route, annotations.Overrides{Path: "/healthz"})
+	got := HTTPRouteMonitors(route, annotations.Overrides{HTTP: annotations.HTTPOverrides{Path: "/healthz"}})
 	if got[0].Spec.HTTP.URL != "https://app.example.com/healthz" {
 		t.Errorf("URL = %q, want %q", got[0].Spec.HTTP.URL, "https://app.example.com/healthz")
 	}
@@ -108,9 +108,11 @@ func TestHTTPRouteMonitors_Phase1OverridesApplied(t *testing.T) {
 	}
 	ov := annotations.Overrides{
 		Description: "a friendly description", ResendInterval: 3, UpsideDown: true,
-		Timeout: 30, MaxRedirects: 5, IgnoreTLS: true, CacheBust: true,
-		ExpiryNotification: true, DomainExpiryNotification: true,
-		Headers: `{"X-Custom":"value"}`, Body: `{"key":"value"}`,
+		HTTP: annotations.HTTPOverrides{
+			Timeout: 30, MaxRedirects: 5, IgnoreTLS: true, CacheBust: true,
+			ExpiryNotification: true, DomainExpiryNotification: true,
+			Headers: `{"X-Custom":"value"}`, Body: `{"key":"value"}`,
+		},
 	}
 
 	got := HTTPRouteMonitors(route, ov)

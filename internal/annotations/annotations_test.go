@@ -28,39 +28,218 @@ func TestShouldSync(t *testing.T) {
 	}
 }
 
-func TestParseOverrides(t *testing.T) {
+func TestParseOverrides_TopLevelFields(t *testing.T) {
 	ov, err := ParseOverrides(map[string]string{
-		Name:                "friendly-name",
-		Scheme:              "http",
-		Interval:            "30",
-		RetryInterval:       "10",
-		MaxRetries:          "5",
-		AcceptedStatusCodes: "200-299, 301",
+		Name:           "friendly-name",
+		Type:           "TCP",
+		Interval:       "30",
+		RetryInterval:  "10",
+		MaxRetries:     "5",
+		Description:    "a friendly description",
+		ResendInterval: "3",
+		UpsideDown:     "true",
+		Notifications:  "slack-prod, email-oncall",
+		Group:          "prod-services",
+		Proxy:          "7",
+		Tags:           "env-prod, team-platform",
 	})
 	if err != nil {
 		t.Fatalf("ParseOverrides: %v", err)
 	}
 	want := Overrides{
-		Name: "friendly-name", Scheme: "http",
+		Name: "friendly-name", Type: "TCP",
 		Interval: 30, RetryInterval: 10, MaxRetries: 5,
-		AcceptedStatusCodes: []string{"200-299", "301"},
+		Description: "a friendly description", ResendInterval: 3, UpsideDown: true,
+		Notifications: []string{"slack-prod", "email-oncall"},
+		Group:         "prod-services",
+		Proxy:         7,
+		Tags:          []string{"env-prod", "team-platform"},
 	}
-	if ov.Name != want.Name || ov.Scheme != want.Scheme || ov.Interval != want.Interval ||
-		ov.RetryInterval != want.RetryInterval || ov.MaxRetries != want.MaxRetries ||
-		len(ov.AcceptedStatusCodes) != 2 || ov.AcceptedStatusCodes[0] != "200-299" || ov.AcceptedStatusCodes[1] != "301" {
+	if !reflect.DeepEqual(ov, want) {
 		t.Errorf("ParseOverrides = %+v, want %+v", ov, want)
-	}
-}
-
-func TestParseOverrides_InvalidScheme(t *testing.T) {
-	if _, err := ParseOverrides(map[string]string{Scheme: "ftp"}); err == nil {
-		t.Fatal("expected error for invalid scheme, got nil")
 	}
 }
 
 func TestParseOverrides_InvalidInteger(t *testing.T) {
 	if _, err := ParseOverrides(map[string]string{Interval: "not-a-number"}); err == nil {
 		t.Fatal("expected error for non-integer interval, got nil")
+	}
+}
+
+func TestParseOverrides_InvalidBoolean(t *testing.T) {
+	if _, err := ParseOverrides(map[string]string{UpsideDown: "not-a-bool"}); err == nil {
+		t.Fatal("expected error for non-boolean upside-down, got nil")
+	}
+}
+
+func TestParseOverrides_InvalidProxy(t *testing.T) {
+	if _, err := ParseOverrides(map[string]string{Proxy: "not-a-number"}); err == nil {
+		t.Fatal("expected error for non-integer proxy, got nil")
+	}
+}
+
+// A trailing or doubled comma must not yield an empty-string entry: for tags
+// that would create and attach a blank tag in Kuma, and for notifications it
+// fails the reconcile with a confusing `channel "" not found` error.
+func TestParseOverrides_SkipsEmptyCommaSeparatedEntries(t *testing.T) {
+	ov, err := ParseOverrides(map[string]string{
+		Tags:          "env-prod,,team-platform, ",
+		Notifications: "slack-prod,,email-oncall, ",
+	})
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	if !reflect.DeepEqual(ov.Tags, []string{"env-prod", "team-platform"}) {
+		t.Errorf("Tags = %v, want [env-prod team-platform] with no empty entries", ov.Tags)
+	}
+	if !reflect.DeepEqual(ov.Notifications, []string{"slack-prod", "email-oncall"}) {
+		t.Errorf("Notifications = %v, want [slack-prod email-oncall] with no empty entries", ov.Notifications)
+	}
+}
+
+func TestParseOverrides_HTTPFields(t *testing.T) {
+	ov, err := ParseOverrides(map[string]string{
+		HTTPHost:                     "custom.example.com",
+		HTTPPort:                     "8080",
+		HTTPScheme:                   "https",
+		HTTPPath:                     "/healthz",
+		HTTPAcceptedStatusCodes:      "200-299, 301",
+		HTTPTimeout:                  "10",
+		HTTPMaxRedirects:             "5",
+		HTTPIgnoreTLS:                "true",
+		HTTPCacheBust:                "true",
+		HTTPExpiryNotification:       "true",
+		HTTPDomainExpiryNotification: "true",
+		HTTPHeaders:                  `{"X-Custom":"value"}`,
+		HTTPBody:                     `{"key":"value"}`,
+	})
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	want := HTTPOverrides{
+		Host: "custom.example.com", Port: "8080",
+		Scheme: "https", Path: "/healthz",
+		AcceptedStatusCodes:      []string{"200-299", "301"},
+		Timeout:                  10,
+		MaxRedirects:             5,
+		IgnoreTLS:                true,
+		CacheBust:                true,
+		ExpiryNotification:       true,
+		DomainExpiryNotification: true,
+		Headers:                  `{"X-Custom":"value"}`,
+		Body:                     `{"key":"value"}`,
+	}
+	if !reflect.DeepEqual(ov.HTTP, want) {
+		t.Errorf("ov.HTTP = %+v, want %+v", ov.HTTP, want)
+	}
+}
+
+func TestParseOverrides_InvalidHTTPScheme(t *testing.T) {
+	if _, err := ParseOverrides(map[string]string{HTTPScheme: "ftp"}); err == nil {
+		t.Fatal("expected error for invalid scheme, got nil")
+	}
+}
+
+func TestParseOverrides_InvalidHTTPPath(t *testing.T) {
+	if _, err := ParseOverrides(map[string]string{HTTPPath: "no-leading-slash"}); err == nil {
+		t.Fatal("expected error for path without leading slash, got nil")
+	}
+}
+
+func TestParseOverrides_HTTPPathUnsetDefaultsEmpty(t *testing.T) {
+	ov, err := ParseOverrides(nil)
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	if ov.HTTP.Path != "" {
+		t.Errorf("HTTP.Path = %q, want empty string when unset", ov.HTTP.Path)
+	}
+}
+
+func TestParseOverrides_TCPFields(t *testing.T) {
+	ov, err := ParseOverrides(map[string]string{
+		TCPHost:                     "tcp.example.com",
+		TCPPort:                     "5432",
+		TCPTLSMode:                  "secure",
+		TCPExpectedSSLAlert:         "unrecognized_name",
+		TCPExpiryNotification:       "true",
+		TCPDomainExpiryNotification: "true",
+	})
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	want := TCPOverrides{
+		Host: "tcp.example.com", Port: "5432",
+		TLSMode: "secure", ExpectedSSLAlert: "unrecognized_name",
+		ExpiryNotification: true, DomainExpiryNotification: true,
+	}
+	if !reflect.DeepEqual(ov.TCP, want) {
+		t.Errorf("ov.TCP = %+v, want %+v", ov.TCP, want)
+	}
+}
+
+func TestParseOverrides_InvalidTCPTLSMode(t *testing.T) {
+	if _, err := ParseOverrides(map[string]string{TCPTLSMode: "bogus"}); err == nil {
+		t.Fatal("expected error for invalid tls-mode, got nil")
+	}
+}
+
+func TestParseOverrides_PingFields(t *testing.T) {
+	ov, err := ParseOverrides(map[string]string{
+		PingHost:                     "ping.example.com",
+		PingTimeout:                  "5",
+		PingPacketSize:               "56",
+		PingDomainExpiryNotification: "true",
+	})
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	want := PingOverrides{
+		Host: "ping.example.com", Timeout: 5, PacketSize: 56, DomainExpiryNotification: true,
+	}
+	if !reflect.DeepEqual(ov.Ping, want) {
+		t.Errorf("ov.Ping = %+v, want %+v", ov.Ping, want)
+	}
+}
+
+func TestParseOverrides_DNSFields(t *testing.T) {
+	ov, err := ParseOverrides(map[string]string{
+		DNSHost:                     "dns.example.com",
+		DNSPort:                     "5353",
+		DNSResolverServer:           "1.1.1.1",
+		DNSResolveType:              "A",
+		DNSDomainExpiryNotification: "true",
+	})
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	want := DNSOverrides{
+		Host: "dns.example.com", Port: 5353,
+		ResolverServer: "1.1.1.1", ResolveType: "A",
+		DomainExpiryNotification: true,
+	}
+	if !reflect.DeepEqual(ov.DNS, want) {
+		t.Errorf("ov.DNS = %+v, want %+v", ov.DNS, want)
+	}
+}
+
+func TestParseOverrides_GamedigFields(t *testing.T) {
+	ov, err := ParseOverrides(map[string]string{
+		GamedigHost:                     "game.example.com",
+		GamedigPort:                     "27015",
+		GamedigGame:                     "csgo",
+		GamedigGivenPortOnly:            "true",
+		GamedigDomainExpiryNotification: "true",
+	})
+	if err != nil {
+		t.Fatalf("ParseOverrides: %v", err)
+	}
+	want := GamedigOverrides{
+		Host: "game.example.com", Port: "27015",
+		Game: "csgo", GivenPortOnly: true, DomainExpiryNotification: true,
+	}
+	if !reflect.DeepEqual(ov.Gamedig, want) {
+		t.Errorf("ov.Gamedig = %+v, want %+v", ov.Gamedig, want)
 	}
 }
 
@@ -114,111 +293,5 @@ func TestParseMonitorIDs_MissingAnnotationIsEmptyMap(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("ParseMonitorIDs(nil) = %v, want empty map", got)
-	}
-}
-
-func TestParseOverrides_Phase1Fields(t *testing.T) {
-	ov, err := ParseOverrides(map[string]string{
-		Description:              "a friendly description",
-		ResendInterval:           "3",
-		UpsideDown:               "true",
-		Timeout:                  "10",
-		MaxRedirects:             "5",
-		IgnoreTLS:                "true",
-		CacheBust:                "true",
-		ExpiryNotification:       "true",
-		DomainExpiryNotification: "true",
-		Headers:                  `{"X-Custom":"value"}`,
-		Body:                     `{"key":"value"}`,
-		Path:                     "/healthz",
-	})
-	if err != nil {
-		t.Fatalf("ParseOverrides: %v", err)
-	}
-	want := Overrides{
-		Description: "a friendly description", ResendInterval: 3, UpsideDown: true,
-		Timeout: 10, MaxRedirects: 5, IgnoreTLS: true, CacheBust: true,
-		ExpiryNotification: true, DomainExpiryNotification: true,
-		Headers: `{"X-Custom":"value"}`, Body: `{"key":"value"}`, Path: "/healthz",
-	}
-	if !reflect.DeepEqual(ov, want) {
-		t.Errorf("ParseOverrides = %+v, want %+v", ov, want)
-	}
-}
-
-func TestParseOverrides_InvalidBoolean(t *testing.T) {
-	if _, err := ParseOverrides(map[string]string{UpsideDown: "not-a-bool"}); err == nil {
-		t.Fatal("expected error for non-boolean upside-down, got nil")
-	}
-}
-
-func TestParseOverrides_InvalidPath(t *testing.T) {
-	if _, err := ParseOverrides(map[string]string{Path: "no-leading-slash"}); err == nil {
-		t.Fatal("expected error for path without leading slash, got nil")
-	}
-}
-
-func TestParseOverrides_PathUnsetDefaultsEmpty(t *testing.T) {
-	ov, err := ParseOverrides(nil)
-	if err != nil {
-		t.Fatalf("ParseOverrides: %v", err)
-	}
-	if ov.Path != "" {
-		t.Errorf("Path = %q, want empty string when unset", ov.Path)
-	}
-}
-
-func TestParseOverrides_Phase2ReferenceFields(t *testing.T) {
-	ov, err := ParseOverrides(map[string]string{
-		Notifications: "slack-prod, email-oncall",
-		Group:         "prod-services",
-		Proxy:         "7",
-	})
-	if err != nil {
-		t.Fatalf("ParseOverrides: %v", err)
-	}
-	want := Overrides{
-		Notifications: []string{"slack-prod", "email-oncall"},
-		Group:         "prod-services",
-		Proxy:         7,
-	}
-	if !reflect.DeepEqual(ov, want) {
-		t.Errorf("ParseOverrides = %+v, want %+v", ov, want)
-	}
-}
-
-func TestParseOverrides_InvalidProxy(t *testing.T) {
-	if _, err := ParseOverrides(map[string]string{Proxy: "not-a-number"}); err == nil {
-		t.Fatal("expected error for non-integer proxy, got nil")
-	}
-}
-
-func TestParseOverrides_Tags(t *testing.T) {
-	ov, err := ParseOverrides(map[string]string{Tags: "env-prod, team-platform"})
-	if err != nil {
-		t.Fatalf("ParseOverrides: %v", err)
-	}
-	if len(ov.Tags) != 2 || ov.Tags[0] != "env-prod" || ov.Tags[1] != "team-platform" {
-		t.Errorf("Tags = %v, want [env-prod team-platform]", ov.Tags)
-	}
-}
-
-// A trailing or doubled comma must not yield an empty-string entry: for
-// tags that would create and attach a blank tag in Kuma, and for
-// notifications it fails the reconcile with a confusing `channel ""
-// not found` error.
-func TestParseOverrides_SkipsEmptyCommaSeparatedEntries(t *testing.T) {
-	ov, err := ParseOverrides(map[string]string{
-		Tags:          "env-prod,,team-platform, ",
-		Notifications: "slack-prod,,email-oncall, ",
-	})
-	if err != nil {
-		t.Fatalf("ParseOverrides: %v", err)
-	}
-	if !reflect.DeepEqual(ov.Tags, []string{"env-prod", "team-platform"}) {
-		t.Errorf("Tags = %v, want [env-prod team-platform] with no empty entries", ov.Tags)
-	}
-	if !reflect.DeepEqual(ov.Notifications, []string{"slack-prod", "email-oncall"}) {
-		t.Errorf("Notifications = %v, want [slack-prod email-oncall] with no empty entries", ov.Notifications)
 	}
 }

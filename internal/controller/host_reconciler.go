@@ -38,14 +38,16 @@ type hostReconcilerParams struct {
 // deriveMonitors). kind is used only in log messages ("Ingress" /
 // "HTTPRoute"). deriveMonitors builds the desired per-host monitor set
 // from obj's routing rules and the given override annotations —
-// derive.IngressMonitors / derive.HTTPRouteMonitors, bound to obj by the
-// caller's closure.
+// derive.IngressMonitors / derive.HTTPRouteMonitors / derive.ServiceMonitors,
+// bound to obj by the caller's closure. Only the Service closure can
+// actually return a non-nil error (ambiguous port, missing required
+// per-type field, unknown type) — Ingress/HTTPRoute always return nil.
 func reconcileHostBasedResource(
 	ctx context.Context,
 	p hostReconcilerParams,
 	obj client.Object,
 	kind string,
-	deriveMonitors func(annotations.Overrides) []derive.DesiredMonitor,
+	deriveMonitors func(annotations.Overrides) ([]derive.DesiredMonitor, error),
 ) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -93,7 +95,11 @@ func reconcileHostBasedResource(
 		return ctrl.Result{}, err
 	}
 
-	desired := deriveMonitors(ov)
+	desired, err := deriveMonitors(ov)
+	if err != nil {
+		recordSyncFailure(p.Recorder, obj, err)
+		return ctrl.Result{}, err
+	}
 	notificationIDs, groupID, err := resolveReferences(ctx, p.Kuma, ov.Notifications, ov.Group)
 	if err != nil {
 		recordSyncFailure(p.Recorder, obj, err)

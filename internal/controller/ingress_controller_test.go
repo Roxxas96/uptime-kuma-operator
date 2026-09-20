@@ -487,10 +487,10 @@ func TestIngressReconciler_SyncsPhase1Overrides(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "phase1-overrides", Namespace: "default",
 			Annotations: map[string]string{
-				annotations.Enabled:     "true",
-				annotations.Description: "a friendly description",
-				annotations.IgnoreTLS:   "true",
-				annotations.Path:        "/healthz",
+				annotations.Enabled:       "true",
+				annotations.Description:   "a friendly description",
+				annotations.HTTPIgnoreTLS: "true",
+				annotations.HTTPPath:      "/healthz",
 			},
 		},
 		Spec: networkingv1.IngressSpec{Rules: []networkingv1.IngressRule{{Host: "app.example.com"}}},
