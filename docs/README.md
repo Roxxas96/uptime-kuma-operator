@@ -1,8 +1,8 @@
 # Uptime Kuma Operator — User Guide
 
-The Uptime Kuma Operator watches your cluster's `Ingress` and `HTTPRoute`
-resources — and a `Monitor` custom resource for anything routing can't
-describe — and keeps matching [Uptime Kuma](https://github.com/louislam/uptime-kuma)
+The Uptime Kuma Operator watches your cluster's `Ingress`, `HTTPRoute`,
+and `Service` resources — and a `Monitor` custom resource for full manual
+control — and keeps matching [Uptime Kuma](https://github.com/louislam/uptime-kuma)
 monitors in sync automatically. Point it at your Kuma instance, annotate
 what you want monitored, and stop clicking "Add Monitor" by hand.
 
@@ -16,6 +16,7 @@ implementation history, see [`docs/superpowers/`](superpowers/).
 - [Installing](#installing)
 - [Choosing what gets watched](#choosing-what-gets-watched)
 - [Monitoring Ingress and HTTPRoute](#monitoring-ingress-and-httproute)
+- [Watching Services](#watching-services)
 - [The Monitor CRD](#the-monitor-crd)
 - [Tags, notifications, groups, and proxies](#tags-notifications-groups-and-proxies)
 - [Configuration reference](#configuration-reference)
@@ -130,38 +131,107 @@ deleted instead).
 ### Annotation reference
 
 All annotations are optional overrides on top of Kuma's own defaults, and
-apply to both `Ingress` and `HTTPRoute`.
+apply to `Ingress`, `HTTPRoute`, and `Service` alike (see
+[Watching Services](#watching-services) below for what's Service-specific).
+
+Since a `Service` can produce a monitor of any Kuma type (not just HTTP),
+the annotation contract mirrors the [Monitor CRD](#the-monitor-crd)'s own
+shape: fields that exist once regardless of monitor type stay unscoped
+under `uptime-kuma.io/`; fields specific to one Kuma type are scoped
+under `<type>.uptime-kuma.io/` (e.g. `http.uptime-kuma.io/timeout`) — the
+type lives in the DNS-subdomain prefix, since a Kubernetes annotation key
+allows only one `/` (the same pattern well-known operators use for their
+own annotation families, e.g. `cert-manager.io/*`).
+
+#### Top-level annotations
+
+These apply to every resource kind (`Ingress`, `HTTPRoute`, `Service`)
+regardless of monitor type.
 
 | Annotation | Type | Notes |
 |---|---|---|
 | `uptime-kuma.io/enabled` | `true`/`false` | Opts the resource in/out — see [above](#choosing-what-gets-watched) |
-| `uptime-kuma.io/name` | string | Monitor name; defaults to `<namespace>/<name>/<host>` |
-| `uptime-kuma.io/scheme` | `http`/`https` | Overrides the derived scheme |
-| `uptime-kuma.io/path` | string, starts with `/` | Request path; defaults to `/` |
+| `uptime-kuma.io/name` | string | Monitor name; defaults to `<namespace>/<name>/<host>` (Ingress/HTTPRoute) or `<namespace>/<name>` (Service) |
+| `uptime-kuma.io/type` | `HTTP`/`TCP`/`Ping`/`DNS`/`Gamedig` | **Service only** — selects the monitor type; defaults to `HTTP`. Ingress/HTTPRoute never read this — they are always HTTP. |
 | `uptime-kuma.io/interval` | integer (seconds) | Check interval |
 | `uptime-kuma.io/retry-interval` | integer (seconds) | Interval between retries |
 | `uptime-kuma.io/max-retries` | integer | Retries before a monitor is marked down |
-| `uptime-kuma.io/accepted-statuscodes` | comma-separated list | e.g. `200-299,301` |
 | `uptime-kuma.io/description` | string | Shown alongside the monitor in the Kuma UI |
 | `uptime-kuma.io/resend-interval` | integer | Failed checks between repeated down notifications; `0` disables resending |
 | `uptime-kuma.io/upside-down` | `true`/`false` | Inverts up/down |
-| `uptime-kuma.io/timeout` | integer (seconds) | Request timeout |
-| `uptime-kuma.io/max-redirects` | integer | Redirects to follow |
-| `uptime-kuma.io/ignore-tls` | `true`/`false` | Skip TLS certificate validation |
-| `uptime-kuma.io/cache-bust` | `true`/`false` | Append a cache-busting query parameter |
-| `uptime-kuma.io/expiry-notification` | `true`/`false` | TLS certificate expiry notifications |
-| `uptime-kuma.io/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
-| `uptime-kuma.io/headers` | string | Opaque passthrough to Kuma (raw JSON, as Kuma's UI expects) |
-| `uptime-kuma.io/body` | string | Opaque passthrough to Kuma |
 | `uptime-kuma.io/tags` | comma-separated list | See [Tags, notifications, groups, and proxies](#tags-notifications-groups-and-proxies) |
 | `uptime-kuma.io/notifications` | comma-separated list | Notification channel names; each must already exist in Kuma |
 | `uptime-kuma.io/group` | string | Parent group monitor name; must already exist in Kuma |
 | `uptime-kuma.io/proxy` | integer | Kuma proxy ID (proxies have no name in Kuma, only an ID) |
 
+#### `http.uptime-kuma.io/` annotations
+
+Used by Ingress and HTTPRoute always, and by Service when `type` is
+`HTTP` (the default). `host`/`port` are Service-only — Ingress/HTTPRoute
+derive their host from routing rules instead.
+
+| Annotation | Type | Notes |
+|---|---|---|
+| `http.uptime-kuma.io/host` | string | **Service only.** Overrides the default `<name>.<namespace>.svc.cluster.local` target |
+| `http.uptime-kuma.io/port` | integer or Service port name | **Service only.** Required if the Service exposes more than one port; auto-picked if it exposes exactly one |
+| `http.uptime-kuma.io/scheme` | `http`/`https` | Overrides the derived scheme (Ingress: from `spec.tls`; HTTPRoute/Service: `https`/`http` default) |
+| `http.uptime-kuma.io/path` | string, starts with `/` | Request path; defaults to `/` |
+| `http.uptime-kuma.io/accepted-statuscodes` | comma-separated list | e.g. `200-299,301` |
+| `http.uptime-kuma.io/timeout` | integer (seconds) | Request timeout |
+| `http.uptime-kuma.io/max-redirects` | integer | Redirects to follow |
+| `http.uptime-kuma.io/ignore-tls` | `true`/`false` | Skip TLS certificate validation |
+| `http.uptime-kuma.io/cache-bust` | `true`/`false` | Append a cache-busting query parameter |
+| `http.uptime-kuma.io/expiry-notification` | `true`/`false` | TLS certificate expiry notifications |
+| `http.uptime-kuma.io/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
+| `http.uptime-kuma.io/headers` | string | Opaque passthrough to Kuma (raw JSON, as Kuma's UI expects) |
+| `http.uptime-kuma.io/body` | string | Opaque passthrough to Kuma |
+
+#### `tcp.uptime-kuma.io/` annotations (Service, `type: TCP`)
+
+| Annotation | Type | Notes |
+|---|---|---|
+| `tcp.uptime-kuma.io/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target |
+| `tcp.uptime-kuma.io/port` | integer or Service port name | Required if the Service exposes more than one port; auto-picked if it exposes exactly one |
+| `tcp.uptime-kuma.io/tls-mode` | `nostarttls`/`secure`/`starttls` | TLS handshake mode; empty means plain TCP |
+| `tcp.uptime-kuma.io/expected-ssl-alert` | string | Expected TLS alert name during the handshake |
+| `tcp.uptime-kuma.io/expiry-notification` | `true`/`false` | TLS certificate expiry notifications (only honoured when `tls-mode` is `secure` or `starttls`) |
+| `tcp.uptime-kuma.io/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
+
+#### `ping.uptime-kuma.io/` annotations (Service, `type: Ping`)
+
+| Annotation | Type | Notes |
+|---|---|---|
+| `ping.uptime-kuma.io/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target |
+| `ping.uptime-kuma.io/timeout` | integer (seconds) | Per-ping timeout |
+| `ping.uptime-kuma.io/packet-size` | integer (bytes) | ICMP packet size |
+| `ping.uptime-kuma.io/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
+
+There is no Ping port annotation — ICMP has no port concept in Kuma.
+
+#### `dns.uptime-kuma.io/` annotations (Service, `type: DNS`)
+
+| Annotation | Type | Notes |
+|---|---|---|
+| `dns.uptime-kuma.io/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target — the domain name to resolve |
+| `dns.uptime-kuma.io/port` | integer | The resolver's query port. **Not resolved against the Service's own ports** — unlike `http`/`tcp`/`gamedig`'s `port`, this is a plain integer matching the resolver's own query port |
+| `dns.uptime-kuma.io/resolver-server` | string | DNS resolver server address |
+| `dns.uptime-kuma.io/resolve-type` | string | Record type to resolve (e.g. `A`) |
+| `dns.uptime-kuma.io/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
+
+#### `gamedig.uptime-kuma.io/` annotations (Service, `type: Gamedig`)
+
+| Annotation | Type | Notes |
+|---|---|---|
+| `gamedig.uptime-kuma.io/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target |
+| `gamedig.uptime-kuma.io/port` | integer or Service port name | Required if the Service exposes more than one port; auto-picked if it exposes exactly one |
+| `gamedig.uptime-kuma.io/game` | string | **Required.** Gamedig game ID (Kuma's `game` field) |
+| `gamedig.uptime-kuma.io/given-port-only` | `true`/`false` | Probe only the given port instead of letting Kuma guess it |
+| `gamedig.uptime-kuma.io/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
+
 > HTTP Basic/Bearer/OAuth2 auth and Gamedig tokens are **not** available
-> as annotations — each is a credential that has to reference a
-> Kubernetes `Secret`, which doesn't fit in a single annotation value.
-> Use the [Monitor CRD](#the-monitor-crd) for those.
+> as annotations on any resource — each is a credential that has to
+> reference a Kubernetes `Secret`, which doesn't fit in a single
+> annotation value. Use the [Monitor CRD](#the-monitor-crd) for those.
 
 Three annotations are written *by* the operator and shouldn't be set or
 edited by hand: `uptime-kuma.io/monitor-ids` (host → Kuma monitor ID),
@@ -178,7 +248,7 @@ metadata:
   annotations:
     uptime-kuma.io/enabled: "true"
     uptime-kuma.io/interval: "60"
-    uptime-kuma.io/accepted-statuscodes: "200-299"
+    http.uptime-kuma.io/accepted-statuscodes: "200-299"
     uptime-kuma.io/tags: "production,customer-facing"
     uptime-kuma.io/notifications: "slack-oncall"
 spec:
@@ -192,6 +262,42 @@ spec:
               service:
                 name: my-app
                 port: { number: 80 }
+```
+
+## Watching Services
+
+A plain `Service` can be opted in the same way as an Ingress/HTTPRoute,
+but — since a Service carries no routing information of its own — it can
+produce a monitor of **any** Kuma type, selected via `uptime-kuma.io/type`
+(default `HTTP`):
+
+```bash
+kubectl annotate service my-app uptime-kuma.io/enabled=true
+```
+
+By default, the check target is the Service's in-cluster DNS name
+(`<name>.<namespace>.svc.cluster.local`); every type's `host` annotation
+(`http.uptime-kuma.io/host`, `tcp.uptime-kuma.io/host`, etc. — see the
+[annotation reference](#annotation-reference) above) overrides that.
+HTTP, TCP, and Gamedig monitors additionally need a Service port: it's
+auto-picked when the Service exposes exactly one, otherwise the matching
+`port` annotation (by port number or by `Service.spec.ports[].name`) is
+required and reconciliation fails with a clear error without it.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-server
+  annotations:
+    uptime-kuma.io/enabled: "true"
+    uptime-kuma.io/type: "Gamedig"
+    gamedig.uptime-kuma.io/game: "csgo"
+spec:
+  ports:
+    - port: 27015
+  selector:
+    app: game-server
 ```
 
 ## The Monitor CRD

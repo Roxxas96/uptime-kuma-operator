@@ -1,7 +1,8 @@
 # Uptime Kuma Operator
 
-Syncs Uptime Kuma monitors from `Ingress` and `HTTPRoute` resources, and
-from a `Monitor` CRD for manually declared DNS/Gamedig/TCP/Ping monitors.
+Syncs Uptime Kuma monitors from `Ingress`, `HTTPRoute`, and `Service`
+resources (any monitor type via a `uptime-kuma.io/type` annotation on
+`Service`), and from a `Monitor` CRD for full manual control.
 
 See **[`docs/README.md`](docs/README.md)** for the full user guide
 (annotations, the Monitor CRD, tags/notifications, troubleshooting), or
@@ -139,6 +140,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup (`mise install` +
 
 ## Annotations
 
-See the design spec's "Annotation contract" section for the full list
-(`uptime-kuma.io/enabled`, `.../name`, `.../scheme`, `.../interval`,
-`.../retry-interval`, `.../max-retries`, `.../accepted-statuscodes`).
+See [`docs/README.md`](docs/README.md#watching-services) for the full,
+per-type annotation tables (top-level plus `http.uptime-kuma.io/`,
+`tcp.uptime-kuma.io/`, `ping.uptime-kuma.io/`, `dns.uptime-kuma.io/`,
+`gamedig.uptime-kuma.io/`).
