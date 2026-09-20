@@ -115,6 +115,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := (&controller.ServiceReconciler{
+		Client: mgr.GetClient(), Kuma: kumaClient, OptInByDefault: cfg.OptInByDefault,
+		Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval, DefaultTags: cfg.DefaultTags,
+		LabelTagPatterns: cfg.LabelTagPatterns,
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create Service controller")
+		os.Exit(1)
+	}
+
 	if err := (&controller.MonitorReconciler{
 		Client: mgr.GetClient(), Kuma: kumaClient, Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval,
 		DefaultTags: cfg.DefaultTags, LabelTagPatterns: cfg.LabelTagPatterns,
