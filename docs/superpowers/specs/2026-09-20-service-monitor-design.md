@@ -59,7 +59,11 @@ exists on all five types with independent values in the CRD). Annotations
 now mirror `api/v1alpha1.MonitorSpec`'s own shape exactly: fields that live
 at the top level of `MonitorSpec` stay unscoped; fields that live inside a
 `Http`/`Tcp`/`Ping`/`Dns`/`Gamedig` sub-spec are scoped under
-`uptime-kuma.io/<type>/...`.
+`<type>.uptime-kuma.io/...` — the type moves into the DNS-subdomain prefix,
+not a second path segment, because a Kubernetes annotation key permits only
+one `/` (separating the prefix from the name); `uptime-kuma.io/http/timeout`
+is not a legal key. This is the same pattern well-known operators use for
+their own annotation families (e.g. `cert-manager.io/*`).
 
 ### Top-level (unscoped) — mirrors `MonitorSpec`'s own fields
 
@@ -82,7 +86,7 @@ at the top level of `MonitorSpec` stay unscoped; fields that live inside a
 Plus the operator-internal `uptime-kuma.io/monitor-ids`,
 `.../synced-hash`, `.../finalizer` (unchanged, not user-facing).
 
-### `uptime-kuma.io/http/...` — mirrors `HTTPMonitorSpec`
+### `http.uptime-kuma.io/...` — mirrors `HTTPMonitorSpec`
 
 `host`, `port` (both **new** — see below), `scheme`, `path`,
 `accepted-statuscodes`, `timeout`, `max-redirects`, `ignore-tls`,
@@ -96,19 +100,19 @@ Ingress/HTTPRoute — has no routing-rule-derived host of its own. Both
 follow the same default/override/port-resolution rules as every other
 type below.
 
-### `uptime-kuma.io/tcp/...` — mirrors `TCPMonitorSpec`
+### `tcp.uptime-kuma.io/...` — mirrors `TCPMonitorSpec`
 
 `host`, `port`, `tls-mode`, `expected-ssl-alert`, `expiry-notification`,
 `domain-expiry-notification`. `port` is resolved against
 `Service.spec.ports` (auto-pick if one, required annotation if more than
 one).
 
-### `uptime-kuma.io/ping/...` — mirrors `PingMonitorSpec`
+### `ping.uptime-kuma.io/...` — mirrors `PingMonitorSpec`
 
 `host`, `timeout`, `packet-size`, `domain-expiry-notification`. No `port`
 — ICMP has none.
 
-### `uptime-kuma.io/dns/...` — mirrors `DNSMonitorSpec`
+### `dns.uptime-kuma.io/...` — mirrors `DNSMonitorSpec`
 
 `host`, `port`, `resolver-server`, `resolve-type`,
 `domain-expiry-notification`. **`port` here is a plain integer, parsed
@@ -117,7 +121,7 @@ like any other numeric annotation — it is never resolved against
 the port used to query the resolver server, unrelated to whatever ports
 the target Service happens to expose.
 
-### `uptime-kuma.io/gamedig/...` — mirrors `GamedigMonitorSpec`
+### `gamedig.uptime-kuma.io/...` — mirrors `GamedigMonitorSpec`
 
 `host`, `port`, `game` (**required** when `type: Gamedig`),
 `given-port-only`, `domain-expiry-notification`. `port` is resolved

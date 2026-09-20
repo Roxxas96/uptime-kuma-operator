@@ -73,9 +73,11 @@ func TestIngressMonitors_OverridesApplied(t *testing.T) {
 		},
 	}
 	ov := annotations.Overrides{
-		Name: "custom-name", Scheme: "https",
-		Interval: 30, RetryInterval: 10, MaxRetries: 2,
-		AcceptedStatusCodes: []string{"200-299"},
+		Name:          "custom-name",
+		Interval:      30,
+		RetryInterval: 10,
+		MaxRetries:    2,
+		HTTP:          annotations.HTTPOverrides{Scheme: "https", AcceptedStatusCodes: []string{"200-299"}},
 	}
 
 	got := IngressMonitors(ing, ov)
@@ -114,9 +116,11 @@ func TestIngressMonitors_Phase1OverridesApplied(t *testing.T) {
 	}
 	ov := annotations.Overrides{
 		Description: "a friendly description", ResendInterval: 3, UpsideDown: true,
-		Timeout: 30, MaxRedirects: 5, IgnoreTLS: true, CacheBust: true,
-		ExpiryNotification: true, DomainExpiryNotification: true,
-		Headers: `{"X-Custom":"value"}`, Body: `{"key":"value"}`,
+		HTTP: annotations.HTTPOverrides{
+			Timeout: 30, MaxRedirects: 5, IgnoreTLS: true, CacheBust: true,
+			ExpiryNotification: true, DomainExpiryNotification: true,
+			Headers: `{"X-Custom":"value"}`, Body: `{"key":"value"}`,
+		},
 	}
 
 	got := IngressMonitors(ing, ov)
@@ -139,7 +143,7 @@ func TestIngressMonitors_PathOverride(t *testing.T) {
 		},
 	}
 
-	got := IngressMonitors(ing, annotations.Overrides{Path: "/healthz"})
+	got := IngressMonitors(ing, annotations.Overrides{HTTP: annotations.HTTPOverrides{Path: "/healthz"}})
 	if got[0].Spec.HTTP.URL != "http://app.example.com/healthz" {
 		t.Errorf("URL = %q, want %q", got[0].Spec.HTTP.URL, "http://app.example.com/healthz")
 	}

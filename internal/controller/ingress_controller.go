@@ -63,8 +63,8 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	log.V(1).Info("reconcile triggered", "resourceVersion", ing.ResourceVersion, "generation", ing.Generation)
 
-	return reconcileHostBasedResource(ctx, r.params(), ing, "Ingress", func(ov annotations.Overrides) []derive.DesiredMonitor {
-		return derive.IngressMonitors(ing, ov)
+	return reconcileHostBasedResource(ctx, r.params(), ing, "Ingress", func(ov annotations.Overrides) ([]derive.DesiredMonitor, error) {
+		return derive.IngressMonitors(ing, ov), nil
 	})
 }
 

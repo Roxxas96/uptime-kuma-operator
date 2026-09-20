@@ -10,11 +10,13 @@ import (
 // httpMonitorSpec builds the kuma.MonitorSpec common to both Ingress- and
 // HTTPRoute-derived monitors: the common MonitorSpec fields plus a fully
 // populated HTTPSpec (including the derived URL), given the resolved
-// scheme and host and the resource's annotation overrides.
+// scheme and host and the resource's annotation overrides. host may
+// already include a ":<port>" suffix (as Service-derived HTTP monitors
+// need) — it is interpolated directly into the URL.
 func httpMonitorSpec(name, scheme, host string, ov annotations.Overrides) kuma.MonitorSpec {
 	path := "/"
-	if ov.Path != "" {
-		path = ov.Path
+	if ov.HTTP.Path != "" {
+		path = ov.HTTP.Path
 	}
 	spec := kuma.MonitorSpec{
 		Type:           kuma.TypeHTTP,
@@ -27,15 +29,15 @@ func httpMonitorSpec(name, scheme, host string, ov annotations.Overrides) kuma.M
 		UpsideDown:     ov.UpsideDown,
 		HTTP: &kuma.HTTPSpec{
 			URL:                      fmt.Sprintf("%s://%s%s", scheme, host, path),
-			AcceptedStatusCodes:      ov.AcceptedStatusCodes,
-			Timeout:                  ov.Timeout,
-			MaxRedirects:             int(ov.MaxRedirects),
-			IgnoreTLS:                ov.IgnoreTLS,
-			CacheBust:                ov.CacheBust,
-			ExpiryNotification:       ov.ExpiryNotification,
-			DomainExpiryNotification: ov.DomainExpiryNotification,
-			Headers:                  ov.Headers,
-			Body:                     ov.Body,
+			AcceptedStatusCodes:      ov.HTTP.AcceptedStatusCodes,
+			Timeout:                  ov.HTTP.Timeout,
+			MaxRedirects:             int(ov.HTTP.MaxRedirects),
+			IgnoreTLS:                ov.HTTP.IgnoreTLS,
+			CacheBust:                ov.HTTP.CacheBust,
+			ExpiryNotification:       ov.HTTP.ExpiryNotification,
+			DomainExpiryNotification: ov.HTTP.DomainExpiryNotification,
+			Headers:                  ov.HTTP.Headers,
+			Body:                     ov.HTTP.Body,
 		},
 	}
 	if ov.Proxy != 0 {

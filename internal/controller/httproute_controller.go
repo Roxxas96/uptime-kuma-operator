@@ -63,8 +63,8 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	log.V(1).Info("reconcile triggered", "resourceVersion", route.ResourceVersion, "generation", route.Generation)
 
-	return reconcileHostBasedResource(ctx, r.params(), route, "HTTPRoute", func(ov annotations.Overrides) []derive.DesiredMonitor {
-		return derive.HTTPRouteMonitors(route, ov)
+	return reconcileHostBasedResource(ctx, r.params(), route, "HTTPRoute", func(ov annotations.Overrides) ([]derive.DesiredMonitor, error) {
+		return derive.HTTPRouteMonitors(route, ov), nil
 	})
 }
 

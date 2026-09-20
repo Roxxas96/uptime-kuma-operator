@@ -4,7 +4,7 @@
 
 **Goal:** Let a plain `Service` be opted into Kuma monitoring via annotations alone, producing a monitor of any type (HTTP/TCP/Ping/DNS/Gamedig) selected by a new `uptime-kuma.io/type` annotation, while rescoping the whole annotation contract to mirror the `Monitor` CRD's per-type sub-specs.
 
-**Architecture:** A new `ServiceReconciler` reuses the existing `reconcileHostBasedResource` shared reconcile loop (same one `IngressReconciler`/`HTTPRouteReconciler` use), fed by a new `derive.ServiceMonitors` function that always yields exactly one `DesiredMonitor` per Service, of whichever Kuma type `uptime-kuma.io/type` selects (default `HTTP`). Getting there requires first restructuring `internal/annotations.Overrides` from a flat struct into one mirroring `MonitorSpec`'s top-level-plus-sub-spec shape, since annotations are now scoped per type (`uptime-kuma.io/http/timeout`, `uptime-kuma.io/tcp/host`, etc.) rather than flat.
+**Architecture:** A new `ServiceReconciler` reuses the existing `reconcileHostBasedResource` shared reconcile loop (same one `IngressReconciler`/`HTTPRouteReconciler` use), fed by a new `derive.ServiceMonitors` function that always yields exactly one `DesiredMonitor` per Service, of whichever Kuma type `uptime-kuma.io/type` selects (default `HTTP`). Getting there requires first restructuring `internal/annotations.Overrides` from a flat struct into one mirroring `MonitorSpec`'s top-level-plus-sub-spec shape, since annotations are now scoped per type (`http.uptime-kuma.io/timeout`, `tcp.uptime-kuma.io/host`, etc.) rather than flat.
 
 **Tech Stack:** Go, controller-runtime, envtest (Kubernetes API server for controller tests), Helm (chart RBAC).
 
@@ -14,7 +14,7 @@
 
 - Module path is `uptime-kuma-operator`; internal packages are imported as `uptime-kuma-operator/internal/...`.
 - This is a **breaking change** to every existing annotation name from Phase 1/2 — no backwards-compatibility aliases, no deprecation period (per spec: "the operator has no users yet").
-- Annotation keys are all-lowercase, kebab-case, under the `uptime-kuma.io/` prefix (unscoped) or `uptime-kuma.io/<type>/` prefix (scoped) — exact names are given per-task below, copied from the spec.
+- Annotation keys are all-lowercase, kebab-case, under the `uptime-kuma.io/` prefix (unscoped) or `<type>.uptime-kuma.io/` prefix (scoped — the type lives in the DNS-subdomain prefix, since a Kubernetes annotation key allows only one `/`) — exact names are given per-task below, copied from the spec.
 - `go test ./internal/annotations/...` and `go test ./internal/derive/...` run without any special setup. `go test ./internal/controller/...` (and `./cmd/...`) need envtest binaries — use `make test` (sets `KUBEBUILDER_ASSETS` automatically) unless already exported in your shell.
 - Follow TDD: write the failing test, confirm it fails for the right reason, then write the minimal implementation, then confirm it passes.
 - Every commit message body ends with the attribution line configured for this session (already present in this repo's recent commits as `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`).
@@ -385,57 +385,57 @@ const (
 // instead) — they exist only to let a Service-derived HTTP monitor
 // synthesize one.
 const (
-	HTTPHost                     = "uptime-kuma.io/http/host"
-	HTTPPort                     = "uptime-kuma.io/http/port"
-	HTTPScheme                   = "uptime-kuma.io/http/scheme"
-	HTTPPath                     = "uptime-kuma.io/http/path"
-	HTTPAcceptedStatusCodes      = "uptime-kuma.io/http/accepted-statuscodes"
-	HTTPTimeout                  = "uptime-kuma.io/http/timeout"
-	HTTPMaxRedirects             = "uptime-kuma.io/http/max-redirects"
-	HTTPIgnoreTLS                = "uptime-kuma.io/http/ignore-tls"
-	HTTPCacheBust                = "uptime-kuma.io/http/cache-bust"
-	HTTPExpiryNotification       = "uptime-kuma.io/http/expiry-notification"
-	HTTPDomainExpiryNotification = "uptime-kuma.io/http/domain-expiry-notification"
-	HTTPHeaders                  = "uptime-kuma.io/http/headers"
-	HTTPBody                     = "uptime-kuma.io/http/body"
+	HTTPHost                     = "http.uptime-kuma.io/host"
+	HTTPPort                     = "http.uptime-kuma.io/port"
+	HTTPScheme                   = "http.uptime-kuma.io/scheme"
+	HTTPPath                     = "http.uptime-kuma.io/path"
+	HTTPAcceptedStatusCodes      = "http.uptime-kuma.io/accepted-statuscodes"
+	HTTPTimeout                  = "http.uptime-kuma.io/timeout"
+	HTTPMaxRedirects             = "http.uptime-kuma.io/max-redirects"
+	HTTPIgnoreTLS                = "http.uptime-kuma.io/ignore-tls"
+	HTTPCacheBust                = "http.uptime-kuma.io/cache-bust"
+	HTTPExpiryNotification       = "http.uptime-kuma.io/expiry-notification"
+	HTTPDomainExpiryNotification = "http.uptime-kuma.io/domain-expiry-notification"
+	HTTPHeaders                  = "http.uptime-kuma.io/headers"
+	HTTPBody                     = "http.uptime-kuma.io/body"
 )
 
 // TCP-scoped annotations mirror api/v1alpha1.TCPMonitorSpec.
 const (
-	TCPHost                     = "uptime-kuma.io/tcp/host"
-	TCPPort                     = "uptime-kuma.io/tcp/port"
-	TCPTLSMode                  = "uptime-kuma.io/tcp/tls-mode"
-	TCPExpectedSSLAlert         = "uptime-kuma.io/tcp/expected-ssl-alert"
-	TCPExpiryNotification       = "uptime-kuma.io/tcp/expiry-notification"
-	TCPDomainExpiryNotification = "uptime-kuma.io/tcp/domain-expiry-notification"
+	TCPHost                     = "tcp.uptime-kuma.io/host"
+	TCPPort                     = "tcp.uptime-kuma.io/port"
+	TCPTLSMode                  = "tcp.uptime-kuma.io/tls-mode"
+	TCPExpectedSSLAlert         = "tcp.uptime-kuma.io/expected-ssl-alert"
+	TCPExpiryNotification       = "tcp.uptime-kuma.io/expiry-notification"
+	TCPDomainExpiryNotification = "tcp.uptime-kuma.io/domain-expiry-notification"
 )
 
 // Ping-scoped annotations mirror api/v1alpha1.PingMonitorSpec. There is no
 // Ping port annotation — ICMP has no port concept in Kuma.
 const (
-	PingHost                     = "uptime-kuma.io/ping/host"
-	PingTimeout                  = "uptime-kuma.io/ping/timeout"
-	PingPacketSize               = "uptime-kuma.io/ping/packet-size"
-	PingDomainExpiryNotification = "uptime-kuma.io/ping/domain-expiry-notification"
+	PingHost                     = "ping.uptime-kuma.io/host"
+	PingTimeout                  = "ping.uptime-kuma.io/timeout"
+	PingPacketSize               = "ping.uptime-kuma.io/packet-size"
+	PingDomainExpiryNotification = "ping.uptime-kuma.io/domain-expiry-notification"
 )
 
 // DNS-scoped annotations mirror api/v1alpha1.DNSMonitorSpec. DNSPort is the
 // resolver's query port, not a Service port — see DNSOverrides.Port.
 const (
-	DNSHost                     = "uptime-kuma.io/dns/host"
-	DNSPort                     = "uptime-kuma.io/dns/port"
-	DNSResolverServer           = "uptime-kuma.io/dns/resolver-server"
-	DNSResolveType              = "uptime-kuma.io/dns/resolve-type"
-	DNSDomainExpiryNotification = "uptime-kuma.io/dns/domain-expiry-notification"
+	DNSHost                     = "dns.uptime-kuma.io/host"
+	DNSPort                     = "dns.uptime-kuma.io/port"
+	DNSResolverServer           = "dns.uptime-kuma.io/resolver-server"
+	DNSResolveType              = "dns.uptime-kuma.io/resolve-type"
+	DNSDomainExpiryNotification = "dns.uptime-kuma.io/domain-expiry-notification"
 )
 
 // Gamedig-scoped annotations mirror api/v1alpha1.GamedigMonitorSpec.
 const (
-	GamedigHost                     = "uptime-kuma.io/gamedig/host"
-	GamedigPort                     = "uptime-kuma.io/gamedig/port"
-	GamedigGame                     = "uptime-kuma.io/gamedig/game"
-	GamedigGivenPortOnly            = "uptime-kuma.io/gamedig/given-port-only"
-	GamedigDomainExpiryNotification = "uptime-kuma.io/gamedig/domain-expiry-notification"
+	GamedigHost                     = "gamedig.uptime-kuma.io/host"
+	GamedigPort                     = "gamedig.uptime-kuma.io/port"
+	GamedigGame                     = "gamedig.uptime-kuma.io/game"
+	GamedigGivenPortOnly            = "gamedig.uptime-kuma.io/given-port-only"
+	GamedigDomainExpiryNotification = "gamedig.uptime-kuma.io/domain-expiry-notification"
 )
 
 // ShouldSync reports whether a resource carrying ann should be synced to
@@ -857,7 +857,7 @@ feat: rescope annotation contract to mirror MonitorSpec's per-type shape
 
 Restructures Overrides into top-level fields plus HTTP/TCP/Ping/DNS/
 Gamedig sub-structs, and renames every existing annotation into its
-scoped form (e.g. uptime-kuma.io/timeout -> uptime-kuma.io/http/timeout).
+scoped form (e.g. uptime-kuma.io/timeout -> http.uptime-kuma.io/timeout).
 Breaking change, accepted per the design spec: no prior users.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
@@ -2137,39 +2137,39 @@ derive their host from routing rules instead.
 
 | Annotation | Value | Meaning |
 |---|---|---|
-| `uptime-kuma.io/http/host` | string | **Service only.** Overrides the default `<name>.<namespace>.svc.cluster.local` target |
-| `uptime-kuma.io/http/port` | integer or Service port name | **Service only.** Required if the Service exposes more than one port; auto-picked if it exposes exactly one |
-| `uptime-kuma.io/http/scheme` | `http`/`https` | Overrides the derived scheme (Ingress: from `spec.tls`; HTTPRoute/Service: `https`/`http` default) |
-| `uptime-kuma.io/http/path` | string, starts with `/` | Request path; defaults to `/` |
-| `uptime-kuma.io/http/accepted-statuscodes` | comma-separated list | e.g. `200-299,301` |
-| `uptime-kuma.io/http/timeout` | integer (seconds) | Request timeout |
-| `uptime-kuma.io/http/max-redirects` | integer | Redirects to follow |
-| `uptime-kuma.io/http/ignore-tls` | `true`/`false` | Skip TLS certificate validation |
-| `uptime-kuma.io/http/cache-bust` | `true`/`false` | Append a cache-busting query parameter |
-| `uptime-kuma.io/http/expiry-notification` | `true`/`false` | TLS certificate expiry notifications |
-| `uptime-kuma.io/http/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
-| `uptime-kuma.io/http/headers` | string | Opaque passthrough to Kuma (raw JSON, as Kuma's UI expects) |
-| `uptime-kuma.io/http/body` | string | Opaque passthrough to Kuma |
+| `http.uptime-kuma.io/host` | string | **Service only.** Overrides the default `<name>.<namespace>.svc.cluster.local` target |
+| `http.uptime-kuma.io/port` | integer or Service port name | **Service only.** Required if the Service exposes more than one port; auto-picked if it exposes exactly one |
+| `http.uptime-kuma.io/scheme` | `http`/`https` | Overrides the derived scheme (Ingress: from `spec.tls`; HTTPRoute/Service: `https`/`http` default) |
+| `http.uptime-kuma.io/path` | string, starts with `/` | Request path; defaults to `/` |
+| `http.uptime-kuma.io/accepted-statuscodes` | comma-separated list | e.g. `200-299,301` |
+| `http.uptime-kuma.io/timeout` | integer (seconds) | Request timeout |
+| `http.uptime-kuma.io/max-redirects` | integer | Redirects to follow |
+| `http.uptime-kuma.io/ignore-tls` | `true`/`false` | Skip TLS certificate validation |
+| `http.uptime-kuma.io/cache-bust` | `true`/`false` | Append a cache-busting query parameter |
+| `http.uptime-kuma.io/expiry-notification` | `true`/`false` | TLS certificate expiry notifications |
+| `http.uptime-kuma.io/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
+| `http.uptime-kuma.io/headers` | string | Opaque passthrough to Kuma (raw JSON, as Kuma's UI expects) |
+| `http.uptime-kuma.io/body` | string | Opaque passthrough to Kuma |
 
 ### `tcp/` annotations (Service, `type: TCP`)
 
 | Annotation | Value | Meaning |
 |---|---|---|
-| `uptime-kuma.io/tcp/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target |
-| `uptime-kuma.io/tcp/port` | integer or Service port name | Required if the Service exposes more than one port; auto-picked if it exposes exactly one |
-| `uptime-kuma.io/tcp/tls-mode` | `nostarttls`/`secure`/`starttls` | TLS handshake mode; empty means plain TCP |
-| `uptime-kuma.io/tcp/expected-ssl-alert` | string | Expected TLS alert name during the handshake |
-| `uptime-kuma.io/tcp/expiry-notification` | `true`/`false` | TLS certificate expiry notifications (only honoured when `tls-mode` is `secure` or `starttls`) |
-| `uptime-kuma.io/tcp/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
+| `tcp.uptime-kuma.io/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target |
+| `tcp.uptime-kuma.io/port` | integer or Service port name | Required if the Service exposes more than one port; auto-picked if it exposes exactly one |
+| `tcp.uptime-kuma.io/tls-mode` | `nostarttls`/`secure`/`starttls` | TLS handshake mode; empty means plain TCP |
+| `tcp.uptime-kuma.io/expected-ssl-alert` | string | Expected TLS alert name during the handshake |
+| `tcp.uptime-kuma.io/expiry-notification` | `true`/`false` | TLS certificate expiry notifications (only honoured when `tls-mode` is `secure` or `starttls`) |
+| `tcp.uptime-kuma.io/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
 
 ### `ping/` annotations (Service, `type: Ping`)
 
 | Annotation | Value | Meaning |
 |---|---|---|
-| `uptime-kuma.io/ping/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target |
-| `uptime-kuma.io/ping/timeout` | integer (seconds) | Per-ping timeout |
-| `uptime-kuma.io/ping/packet-size` | integer (bytes) | ICMP packet size |
-| `uptime-kuma.io/ping/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
+| `ping.uptime-kuma.io/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target |
+| `ping.uptime-kuma.io/timeout` | integer (seconds) | Per-ping timeout |
+| `ping.uptime-kuma.io/packet-size` | integer (bytes) | ICMP packet size |
+| `ping.uptime-kuma.io/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
 
 There is no `ping/port` annotation — ICMP has no port concept in Kuma.
 
@@ -2177,21 +2177,21 @@ There is no `ping/port` annotation — ICMP has no port concept in Kuma.
 
 | Annotation | Value | Meaning |
 |---|---|---|
-| `uptime-kuma.io/dns/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target — the domain name to resolve |
-| `uptime-kuma.io/dns/port` | integer | The resolver's query port. **Not resolved against the Service's own ports** — unlike `http`/`tcp`/`gamedig`'s `port`, this is a plain integer matching `DNSMonitorSpec.Port`'s own semantics |
-| `uptime-kuma.io/dns/resolver-server` | string | DNS resolver server address |
-| `uptime-kuma.io/dns/resolve-type` | string | Record type to resolve (e.g. `A`) |
-| `uptime-kuma.io/dns/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
+| `dns.uptime-kuma.io/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target — the domain name to resolve |
+| `dns.uptime-kuma.io/port` | integer | The resolver's query port. **Not resolved against the Service's own ports** — unlike `http`/`tcp`/`gamedig`'s `port`, this is a plain integer matching `DNSMonitorSpec.Port`'s own semantics |
+| `dns.uptime-kuma.io/resolver-server` | string | DNS resolver server address |
+| `dns.uptime-kuma.io/resolve-type` | string | Record type to resolve (e.g. `A`) |
+| `dns.uptime-kuma.io/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
 
 ### `gamedig/` annotations (Service, `type: Gamedig`)
 
 | Annotation | Value | Meaning |
 |---|---|---|
-| `uptime-kuma.io/gamedig/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target |
-| `uptime-kuma.io/gamedig/port` | integer or Service port name | Required if the Service exposes more than one port; auto-picked if it exposes exactly one |
-| `uptime-kuma.io/gamedig/game` | string | **Required.** Gamedig game ID (Kuma's `game` field) |
-| `uptime-kuma.io/gamedig/given-port-only` | `true`/`false` | Probe only the given port instead of letting Kuma guess it |
-| `uptime-kuma.io/gamedig/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
+| `gamedig.uptime-kuma.io/host` | string | Overrides the default `<name>.<namespace>.svc.cluster.local` target |
+| `gamedig.uptime-kuma.io/port` | integer or Service port name | Required if the Service exposes more than one port; auto-picked if it exposes exactly one |
+| `gamedig.uptime-kuma.io/game` | string | **Required.** Gamedig game ID (Kuma's `game` field) |
+| `gamedig.uptime-kuma.io/given-port-only` | `true`/`false` | Probe only the given port instead of letting Kuma guess it |
+| `gamedig.uptime-kuma.io/domain-expiry-notification` | `true`/`false` | Domain expiry notifications |
 
 Secret-backed auth (HTTP Basic/Bearer/OAuth2, the Gamedig token) is not
 available via annotation on any resource — use the `Monitor` CRD, whose
@@ -2211,7 +2211,7 @@ to:
 ```yaml
     uptime-kuma.io/enabled: "true"
     uptime-kuma.io/interval: "60"
-    uptime-kuma.io/http/accepted-statuscodes: "200-299"
+    http.uptime-kuma.io/accepted-statuscodes: "200-299"
     uptime-kuma.io/tags: "production,customer-facing"
     uptime-kuma.io/notifications: "slack-oncall"
 ```
@@ -2234,7 +2234,7 @@ kubectl annotate service my-app uptime-kuma.io/enabled=true
 
 By default, the check target is the Service's in-cluster DNS name
 (`<name>.<namespace>.svc.cluster.local`); every type's `host` annotation
-(`uptime-kuma.io/http/host`, `.../tcp/host`, etc.) overrides that. HTTP,
+(`http.uptime-kuma.io/host`, `.../tcp/host`, etc.) overrides that. HTTP,
 TCP, and Gamedig monitors additionally need a Service port: it's
 auto-picked when the Service exposes exactly one, otherwise the matching
 `port` annotation (by port number or by `Service.spec.ports[].name`) is
@@ -2248,7 +2248,7 @@ metadata:
   annotations:
     uptime-kuma.io/enabled: "true"
     uptime-kuma.io/type: "Gamedig"
-    uptime-kuma.io/gamedig/game: "csgo"
+    gamedig.uptime-kuma.io/game: "csgo"
 spec:
   ports:
     - port: 27015

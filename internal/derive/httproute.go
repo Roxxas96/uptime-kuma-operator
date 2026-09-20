@@ -10,11 +10,11 @@ import (
 
 // HTTPRouteMonitors derives one DesiredMonitor per distinct, non-empty
 // hostname in route.Spec.Hostnames. Scheme defaults to "https" (HTTPRoute
-// carries no TLS info of its own — see design spec); ov.Scheme overrides it.
+// carries no TLS info of its own — see design spec); ov.HTTP.Scheme overrides it.
 func HTTPRouteMonitors(route *gatewayv1.HTTPRoute, ov annotations.Overrides) []DesiredMonitor {
 	scheme := "https"
-	if ov.Scheme != "" {
-		scheme = ov.Scheme
+	if ov.HTTP.Scheme != "" {
+		scheme = ov.HTTP.Scheme
 	}
 
 	// The Gateway API schema does not enforce uniqueness of spec.hostnames, so
