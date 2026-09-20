@@ -1830,7 +1830,7 @@ func TestServiceReconciler_AmbiguousPortFailsReconcileWithoutCreatingAMonitor(t 
 				annotations.Type:    "TCP",
 			},
 		},
-		Spec: corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}, {Port: 443}}},
+		Spec: corev1.ServiceSpec{Ports: []corev1.ServicePort{{Name: "http", Port: 80}, {Name: "https", Port: 443}}},
 	}
 	if err := k8sClient.Create(ctx, svc); err != nil {
 		t.Fatalf("create Service: %v", err)
