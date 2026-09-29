@@ -3,17 +3,17 @@
 ## Setup
 
 ```bash
-mise install         # pulls go, golangci-lint, helm, kubectl, kind, pre-commit
-                      # (pinned in mise.toml) — see https://mise.jdx.dev to install mise itself
-pre-commit install    # activates the git pre-commit hook
+mise install    # pulls go, golangci-lint, helm, kubectl, kind, prek
+                 # (pinned in mise.toml) — see https://mise.jdx.dev to install mise itself
+prek install     # activates the git pre-commit hook
 ```
 
-`pre-commit run --all-files` runs everything on demand without a commit.
+`prek run --all-files` runs everything on demand without a commit.
 
 ## Making a change
 
 - `make test` runs unit tests and the `envtest`-backed controller suite.
-- `make lint` runs `go vet` + `golangci-lint`; `pre-commit run --all-files`
+- `make lint` runs `go vet` + `golangci-lint`; `prek run --all-files`
   runs the full set CI enforces on top of that (`govulncheck`, `helm lint`,
   and the chart's RBAC-rendering test).
 - If you touch `api/v1alpha1/monitor_types.go`, run `make manifests`

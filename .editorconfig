@@ -18,7 +18,7 @@ indent_size = 4
 indent_style = tab
 
 # Generated CRD/deepcopy files are re-derived by `make manifests`/`make generate`,
-# not hand-edited — excluded from the pre-commit editorconfig-checker hook too.
+# not hand-edited — excluded from the prek-run editorconfig-checker hook too.
 [{api/v1alpha1/zz_generated.deepcopy.go,config/crd/**,charts/*/crds/**}]
 indent_style = unset
 indent_size = unset
