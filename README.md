@@ -106,7 +106,7 @@ internal design.
 ## Development
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup (`mise install` +
-`pre-commit install`) and PR conventions.
+`prek install`) and PR conventions.
 
 - `make test` runs unit tests and the `envtest`-backed controller suite.
 - `go test -tags=integration ./test/integration/...` runs the real-Kuma

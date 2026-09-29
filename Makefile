@@ -59,4 +59,4 @@ vuln:
 
 .PHONY: pre-commit-all
 pre-commit-all:
-	pre-commit run --all-files
+	prek run --all-files

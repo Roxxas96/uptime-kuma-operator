@@ -18,7 +18,7 @@ env:
 
 jobs:
   # Reuses .pre-commit-config.yaml as the single source of truth for lint/format
-  # checks — same checks that run locally via `pre-commit install` /
+  # checks — same checks that run locally via `prek install` /
   # `make pre-commit-all`, so there's exactly one place these rules live.
   lint:
     permissions:
@@ -26,8 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4 # installs go, golangci-lint, govulncheck, helm, pre-commit pinned in mise.toml
-      - uses: pre-commit/action@v3.0.1
+      - uses: jdx/mise-action@v4 # installs go, golangci-lint, govulncheck, helm, prek pinned in mise.toml
+      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
 
   test:
     permissions:
@@ -160,7 +160,7 @@ jobs:
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
 
       # Scan the pushed image for OS and Go-binary vulnerabilities —
-      # govulncheck (pre-commit) only covers the Go module graph, not the
+      # govulncheck (prek) only covers the Go module graph, not the
       # distroless base image's OS packages. image-ref pulls the first tag
       # out of meta's json output (already correctly lowercased) rather
       # than using the tags output directly — that one is a newline-
