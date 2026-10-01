@@ -34,7 +34,7 @@ func TestNewClient_TimesOutInsteadOfHanging(t *testing.T) {
 
 	const timeout = 300 * time.Millisecond
 	start := time.Now()
-	_, err = newClient(context.Background(), "http://"+ln.Addr().String(), "user", "pass", timeout)
+	_, err = newClient(context.Background(), "http://"+ln.Addr().String(), Credentials{Username: "user", Password: "pass"}, timeout)
 	elapsed := time.Since(start)
 
 	if err == nil {

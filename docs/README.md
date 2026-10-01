@@ -73,6 +73,29 @@ Two things happen automatically that are worth knowing about upfront:
      --from-literal=username=admin --from-literal=password=<password>
    ```
 
+   If the account has two-factor authentication enabled, add the base32
+   secret shown when 2FA was set up (the `secret=` part of the
+   `otpauth://` URI) so the operator can generate its own one-time codes:
+
+   ```bash
+   kubectl create secret generic kuma-credentials \
+     --from-literal=username=admin --from-literal=password=<password> \
+     --from-literal=totpSecret=<base32-secret>
+   ```
+
+   Alternatively, use a `sessionToken`: the JWT Uptime Kuma stores in the
+   browser's local storage under `token` after a login with "Remember me"
+   checked (session storage otherwise). It needs no password or 2FA code,
+   and never expires; it is invalidated only when the password changes or
+   the user is deactivated, so treat it like the password. If
+   `username`/`password` are set as well, the token is tried first and the
+   password login is the fallback. Prefer it over `totpSecret` when running
+   more than one replica: Kuma accepts each one-time code only once, so
+   simultaneous logins with the same secret can fail.
+
+   Uptime Kuma's API keys (Settings → API Keys) only grant access to the
+   `/metrics` endpoint and cannot manage monitors, so they won't work here.
+
 2. Install the chart. The `Monitor` CRD ships in the chart itself, so
    Helm installs it automatically. Published releases are available as an
    OCI artifact — no clone needed:

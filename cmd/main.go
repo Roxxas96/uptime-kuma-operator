@@ -60,7 +60,15 @@ func main() {
 	log = ctrl.Log.WithName("setup")
 
 	ctx := context.Background()
-	kumaClient, err := kuma.NewClient(ctx, cfg.KumaURL, cfg.KumaUsername, cfg.KumaPassword)
+	kumaClient, err := kuma.NewClient(ctx, cfg.KumaURL, kuma.Credentials{
+		Username:     cfg.KumaUsername,
+		Password:     cfg.KumaPassword,
+		TOTPSecret:   cfg.KumaTOTPSecret,
+		SessionToken: cfg.KumaSessionToken,
+		OnSessionTokenRejected: func(err error) {
+			log.Info("KUMA_SESSION_TOKEN was rejected, fell back to password login; replace the token", "reason", err.Error())
+		},
+	})
 	if err != nil {
 		log.Error(err, "unable to connect to Uptime Kuma")
 		os.Exit(1)

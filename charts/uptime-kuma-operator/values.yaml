@@ -91,7 +91,12 @@ networkPolicy:
 
 kuma:
   url: ""
-  existingSecret: "" # must contain keys "username" and "password"
+  # Secret with the Kuma credentials. Keys (all optional, but the operator
+  # needs "username"+"password" and/or "sessionToken"):
+  #   username, password  - password login
+  #   totpSecret          - base32 2FA secret, for accounts with 2FA enabled
+  #   sessionToken        - session token (JWT); bypasses 2FA, tried first
+  existingSecret: ""
 
 watchAll: false
 watchNamespaces: [] # e.g. ["prod", "staging"]; ignored (cluster-wide RBAC used) if watchAll is true

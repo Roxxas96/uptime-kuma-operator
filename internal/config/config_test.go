@@ -344,3 +344,57 @@ func TestLoad_LabelTagPatternsSkipsBlankEntries(t *testing.T) {
 		t.Errorf("LabelTagPatterns = %v, want 2 patterns (blank entry skipped)", cfg.LabelTagPatterns)
 	}
 }
+
+func TestLoad_SessionTokenAloneIsEnough(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":           "https://kuma.example.com",
+		"KUMA_SESSION_TOKEN": "jwt",
+		"POD_NAMESPACE":      "default",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.KumaSessionToken != "jwt" {
+		t.Errorf("KumaSessionToken = %q, want %q", cfg.KumaSessionToken, "jwt")
+	}
+}
+
+func TestLoad_ReadsTOTPSecret(t *testing.T) {
+	cfg, err := Load(envMap(map[string]string{
+		"KUMA_URL":         "https://kuma.example.com",
+		"KUMA_USERNAME":    "admin",
+		"KUMA_PASSWORD":    "secret",
+		"KUMA_TOTP_SECRET": "totp",
+		"POD_NAMESPACE":    "default",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.KumaTOTPSecret != "totp" {
+		t.Errorf("KumaTOTPSecret = %q, want %q", cfg.KumaTOTPSecret, "totp")
+	}
+}
+
+func TestLoad_TOTPSecretNeedsPassword(t *testing.T) {
+	_, err := Load(envMap(map[string]string{
+		"KUMA_URL":           "https://kuma.example.com",
+		"KUMA_SESSION_TOKEN": "jwt",
+		"KUMA_TOTP_SECRET":   "totp",
+		"POD_NAMESPACE":      "default",
+	}))
+	if err == nil {
+		t.Fatal("expected error for KUMA_TOTP_SECRET without KUMA_USERNAME/KUMA_PASSWORD, got nil")
+	}
+}
+
+func TestLoad_UsernameWithoutPassword(t *testing.T) {
+	_, err := Load(envMap(map[string]string{
+		"KUMA_URL":           "https://kuma.example.com",
+		"KUMA_USERNAME":      "admin",
+		"KUMA_SESSION_TOKEN": "jwt",
+		"POD_NAMESPACE":      "default",
+	}))
+	if err == nil {
+		t.Fatal("expected error for KUMA_USERNAME without KUMA_PASSWORD, got nil")
+	}
+}

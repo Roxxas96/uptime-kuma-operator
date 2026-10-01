@@ -11,10 +11,17 @@ import (
 const DefaultDriftCheckInterval = 30 * time.Second
 
 type Config struct {
-	KumaURL         string
-	KumaUsername    string
-	KumaPassword    string
-	WatchNamespaces []string
+	KumaURL      string
+	KumaUsername string
+	KumaPassword string
+	// KumaTOTPSecret is the base32 2FA secret, used to answer the one-time
+	// code prompt of a password login on an account with 2FA enabled.
+	KumaTOTPSecret string
+	// KumaSessionToken is a session token (JWT) from an earlier login. It
+	// bypasses 2FA; when a password is set too, it is the fallback for a
+	// token the server rejects.
+	KumaSessionToken string
+	WatchNamespaces  []string
 	// WatchAll controls namespace scope only — whether the manager watches
 	// every namespace or just WatchNamespaces. It has no effect on whether
 	// Ingress/HTTPRoute resources need the uptime-kuma.io/enabled annotation;
@@ -65,6 +72,8 @@ func Load(getenv func(string) string) (Config, error) {
 		KumaURL:            getenv("KUMA_URL"),
 		KumaUsername:       getenv("KUMA_USERNAME"),
 		KumaPassword:       getenv("KUMA_PASSWORD"),
+		KumaTOTPSecret:     getenv("KUMA_TOTP_SECRET"),
+		KumaSessionToken:   getenv("KUMA_SESSION_TOKEN"),
 		WatchAll:           getenv("WATCH_ALL") == "true",
 		OptInByDefault:     getenv("OPT_IN_BY_DEFAULT") == "true",
 		DriftCheckInterval: DefaultDriftCheckInterval,
@@ -93,8 +102,15 @@ func Load(getenv func(string) string) (Config, error) {
 	if cfg.KumaURL == "" {
 		return Config{}, fmt.Errorf("config: KUMA_URL is required")
 	}
-	if cfg.KumaUsername == "" || cfg.KumaPassword == "" {
-		return Config{}, fmt.Errorf("config: KUMA_USERNAME and KUMA_PASSWORD are required")
+	hasPassword := cfg.KumaUsername != "" && cfg.KumaPassword != ""
+	if (cfg.KumaUsername == "") != (cfg.KumaPassword == "") {
+		return Config{}, fmt.Errorf("config: KUMA_USERNAME and KUMA_PASSWORD must be set together")
+	}
+	if !hasPassword && cfg.KumaSessionToken == "" {
+		return Config{}, fmt.Errorf("config: KUMA_USERNAME and KUMA_PASSWORD, or KUMA_SESSION_TOKEN, are required")
+	}
+	if cfg.KumaTOTPSecret != "" && !hasPassword {
+		return Config{}, fmt.Errorf("config: KUMA_TOTP_SECRET requires KUMA_USERNAME and KUMA_PASSWORD")
 	}
 
 	if raw := getenv("WATCH_NAMESPACES"); raw != "" {

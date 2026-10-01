@@ -58,6 +58,21 @@ type realClient struct {
 	inner *bremlkuma.Client
 }
 
+// Credentials authenticate the operator against Uptime Kuma. Username and
+// Password are set together or both left empty. TOTPSecret answers the 2FA
+// prompt of a password login; SessionToken logs in without a password or
+// 2FA code, and is tried first when a password is set as well.
+type Credentials struct {
+	Username     string
+	Password     string
+	TOTPSecret   string
+	SessionToken string
+	// OnSessionTokenRejected, if set, is called when the server refused
+	// SessionToken and the password login took over, so the dead token can
+	// be reported.
+	OnSessionTokenRejected func(err error)
+}
+
 // NewClient logs into the Uptime Kuma instance at url and returns a Client
 // backed by the real Socket.IO connection. The connection attempt is bounded
 // by connectTimeout, so a stalled Kuma endpoint fails fast instead of
@@ -71,12 +86,22 @@ type realClient struct {
 // successfully-connected client. bremlkuma.WithConnectTimeout bounds the
 // connection attempt on its own, independent of ctx's cancellation state,
 // which is what actually fixes the original hang.
-func NewClient(ctx context.Context, url, username, password string) (Client, error) {
-	return newClient(ctx, url, username, password, connectTimeout)
+func NewClient(ctx context.Context, url string, creds Credentials) (Client, error) {
+	return newClient(ctx, url, creds, connectTimeout)
 }
 
-func newClient(ctx context.Context, url, username, password string, timeout time.Duration) (Client, error) {
-	c, err := bremlkuma.New(ctx, url, username, password, bremlkuma.WithConnectTimeout(timeout))
+func newClient(ctx context.Context, url string, creds Credentials, timeout time.Duration) (Client, error) {
+	opts := []bremlkuma.Option{bremlkuma.WithConnectTimeout(timeout)}
+	if creds.TOTPSecret != "" {
+		opts = append(opts, bremlkuma.WithTOTPSecret(creds.TOTPSecret))
+	}
+	if creds.SessionToken != "" {
+		opts = append(opts, bremlkuma.WithSessionToken(creds.SessionToken))
+	}
+	if creds.OnSessionTokenRejected != nil {
+		opts = append(opts, bremlkuma.WithSessionTokenRejectedCallback(creds.OnSessionTokenRejected))
+	}
+	c, err := bremlkuma.New(ctx, url, creds.Username, creds.Password, opts...)
 	if err != nil {
 		return nil, err
 	}

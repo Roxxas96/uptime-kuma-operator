@@ -28,4 +28,11 @@ echo "$out" | grep -q 'kind: ClusterRole$' && { echo "FAIL: did not expect a Clu
 # Role + RoleBinding + Deployment + ServiceAccount all live in the release namespace.
 echo "$out" | grep -c '^  namespace: default$' | grep -q '^4$' || { echo "FAIL: expected Role+RoleBinding scoped to the release namespace 'default'"; exit 1; }
 
+echo "== credential env vars come from the secret, all optional =="
+out=$(helm template test-release charts/uptime-kuma-operator "${REQUIRED[@]}")
+for key in username password totpSecret sessionToken; do
+  echo "$out" | grep -q "key: $key$" || { echo "FAIL: expected secret key $key in the Deployment"; exit 1; }
+done
+echo "$out" | grep -c 'optional: true$' | grep -q '^4$' || { echo "FAIL: expected all 4 credential secret keys to be optional"; exit 1; }
+
 echo "OK"

@@ -18,6 +18,11 @@ internal design.
      --from-literal=username=admin --from-literal=password=<password>
    ```
 
+   For an account with two-factor authentication, add a `totpSecret` key
+   (or use a `sessionToken` instead of username/password) — see the
+   [user guide](docs/README.md#installing). Uptime Kuma API keys only cover
+   `/metrics` and can't be used.
+
 2. Install the chart. The `Monitor` CRD ships in the chart's `crds/`
    directory, so Helm installs it automatically — no separate
    `kubectl apply` step:
