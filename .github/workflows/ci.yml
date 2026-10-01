@@ -186,8 +186,6 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    # Not bump: bump never runs on a tag push (see its own if), and release
-    # already resolves its own app-version from the tag when packaging.
     needs: [lint, test, integration-test, build]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -199,22 +197,14 @@ jobs:
 
       - uses: jdx/mise-action@v4 # installs helm, pinned in mise.toml
 
-      # The chart's own `version:` is the source of truth for what gets
-      # published — it's bumped deliberately in the PR that changes the
-      # chart, not derived from the tag. This just catches the mismatch
-      # (forgot to bump, or tagged the wrong ref) before publishing.
-      - name: Verify chart version matches the tag
-        run: |
-          CHART_VERSION=$(grep '^version:' charts/uptime-kuma-operator/Chart.yaml | awk '{print $2}')
-          if [ "v${CHART_VERSION}" != "${GITHUB_REF_NAME}" ]; then
-            echo "::error::charts/uptime-kuma-operator/Chart.yaml version (${CHART_VERSION}) doesn't match tag (${GITHUB_REF_NAME}) — bump Chart.yaml's version before tagging a release."
-            exit 1
-          fi
-
+      # Both the chart's version and its appVersion come from the tag, so
+      # cutting a release is just pushing a tag — Chart.yaml's own version
+      # is a placeholder that is never published.
       - name: Package chart
         run: |
           mkdir -p dist
-          helm package charts/uptime-kuma-operator --app-version "${GITHUB_REF_NAME#v}" -d dist
+          helm package charts/uptime-kuma-operator \
+            --version "${GITHUB_REF_NAME#v}" --app-version "${GITHUB_REF_NAME#v}" -d dist
 
       - name: Log into registry ${{ env.REGISTRY }}
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
