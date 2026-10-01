@@ -2,6 +2,7 @@ package kuma
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 
 	bremlmonitor "github.com/breml/go-uptime-kuma-client/monitor"
@@ -120,7 +121,7 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 				URL:                      spec.HTTP.URL,
 				Method:                   spec.HTTP.Method,
 				AcceptedStatusCodes:      spec.HTTP.AcceptedStatusCodes,
-				Timeout:                  spec.HTTP.Timeout,
+				Timeout:                  float64(spec.HTTP.Timeout),
 				MaxRedirects:             spec.HTTP.MaxRedirects,
 				IgnoreTLS:                spec.HTTP.IgnoreTLS,
 				CacheBust:                spec.HTTP.CacheBust,
@@ -165,7 +166,7 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 		if spec.Ping == nil {
 			return nil, fmt.Errorf("kuma: monitor type %s requires the Ping field to be set", TypePing)
 		}
-		timeout := spec.Ping.Timeout
+		timeout := float64(spec.Ping.Timeout)
 		details := bremlmonitor.PingDetails{
 			Hostname:                 spec.Ping.Host,
 			PacketSize:               spec.Ping.PacketSize,
@@ -246,7 +247,7 @@ func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 		}
 		spec.HTTP = &HTTPSpec{
 			URL: d.URL, Method: d.Method, AcceptedStatusCodes: d.AcceptedStatusCodes,
-			Timeout: d.Timeout, MaxRedirects: d.MaxRedirects, IgnoreTLS: d.IgnoreTLS,
+			Timeout: secondsFromKuma(d.Timeout), MaxRedirects: d.MaxRedirects, IgnoreTLS: d.IgnoreTLS,
 			CacheBust: d.CacheBust, ExpiryNotification: d.ExpiryNotification,
 			DomainExpiryNotification: d.DomainExpiryNotification, Headers: d.Headers, Body: d.Body,
 			AuthMethod: string(d.AuthMethod), BasicAuthUsername: d.BasicAuthUser, BasicAuthPassword: d.BasicAuthPass,
@@ -280,7 +281,7 @@ func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 			Host: d.Hostname, PacketSize: d.PacketSize, DomainExpiryNotification: d.DomainExpiryNotification,
 		}
 		if d.Timeout != nil {
-			ping.Timeout = *d.Timeout
+			ping.Timeout = secondsFromKuma(*d.Timeout)
 		}
 		spec.Ping = ping
 	case "dns":
@@ -354,4 +355,11 @@ func Equivalent(desired, live MonitorSpec) bool {
 	default:
 		return false
 	}
+}
+
+// secondsFromKuma converts a timeout Kuma stores as fractional seconds (its
+// UI defaults one to 80% of the interval, e.g. 16.8) to the whole seconds
+// MonitorSpec uses, rounding to the nearest second.
+func secondsFromKuma(seconds float64) int64 {
+	return int64(math.Round(seconds))
 }

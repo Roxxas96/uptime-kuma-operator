@@ -595,3 +595,11 @@ func TestToBremlMonitor_HTTP_OAuthAuthMethod(t *testing.T) {
 		})
 	}
 }
+
+func TestSecondsFromKuma_RoundsToNearestSecond(t *testing.T) {
+	for in, want := range map[float64]int64{0: 0, 48: 48, 16.8: 17, 16.4: 16} {
+		if got := secondsFromKuma(in); got != want {
+			t.Errorf("secondsFromKuma(%v) = %d, want %d", in, got, want)
+		}
+	}
+}
