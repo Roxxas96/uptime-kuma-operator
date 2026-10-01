@@ -15,6 +15,7 @@ import (
 	"uptime-kuma-operator/internal/annotations"
 	"uptime-kuma-operator/internal/derive"
 	"uptime-kuma-operator/internal/kuma"
+	"uptime-kuma-operator/internal/telemetry"
 )
 
 type IngressReconciler struct {
@@ -36,6 +37,8 @@ type IngressReconciler struct {
 	// label-tag inference for every monitor this reconciler manages. See
 	// sync.go's deriveLabelTags doc comment.
 	LabelTagPatterns []*regexp.Regexp
+	// Managed feeds the managed-monitors gauge; nil records nothing.
+	Managed *telemetry.ManagedMonitors
 }
 
 func (r *IngressReconciler) params() hostReconcilerParams {
@@ -47,6 +50,8 @@ func (r *IngressReconciler) params() hostReconcilerParams {
 		DriftCheckInterval: r.DriftCheckInterval,
 		DefaultTags:        r.DefaultTags,
 		LabelTagPatterns:   r.LabelTagPatterns,
+		Managed:            r.Managed,
+		Source:             telemetry.SourceIngress,
 	}
 }
 
@@ -57,6 +62,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := r.Client.Get(ctx, req.NamespacedName, ing); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.V(1).Info("Ingress not found, assuming it was deleted")
+			r.Managed.Set(telemetry.SourceIngress, req.NamespacedName, 0)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err

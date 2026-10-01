@@ -15,6 +15,7 @@ import (
 	"uptime-kuma-operator/internal/annotations"
 	"uptime-kuma-operator/internal/derive"
 	"uptime-kuma-operator/internal/kuma"
+	"uptime-kuma-operator/internal/telemetry"
 )
 
 // hostReconcilerParams bundles what's identical across the Ingress and
@@ -28,6 +29,10 @@ type hostReconcilerParams struct {
 	DriftCheckInterval time.Duration
 	DefaultTags        []string
 	LabelTagPatterns   []*regexp.Regexp
+	// Managed and Source feed the managed-monitors gauge; Source is one of
+	// the telemetry.Source* constants. A nil Managed records nothing.
+	Managed *telemetry.ManagedMonitors
+	Source  string
 }
 
 // reconcileHostBasedResource implements the reconcile logic shared by the
@@ -50,6 +55,7 @@ func reconcileHostBasedResource(
 	deriveMonitors func(annotations.Overrides) ([]derive.DesiredMonitor, error),
 ) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
+	key := client.ObjectKeyFromObject(obj)
 
 	if !obj.GetDeletionTimestamp().IsZero() {
 		log.V(1).Info(kind + " marked for deletion, deleting its Kuma monitors")
@@ -63,6 +69,7 @@ func reconcileHostBasedResource(
 				return ctrl.Result{}, err
 			}
 		}
+		p.Managed.Set(p.Source, key, 0)
 		return ctrl.Result{}, nil
 	}
 
@@ -83,7 +90,11 @@ func reconcileHostBasedResource(
 		// Drop the monitor-ids annotation *and* the finalizer: an opted-out
 		// resource is no longer ours, and a lingering finalizer would block
 		// its deletion forever if the operator is uninstalled.
-		return ctrl.Result{}, persistMonitorIDs(ctx, p.Client, obj, nil, false, "")
+		if err := persistMonitorIDs(ctx, p.Client, obj, nil, false, ""); err != nil {
+			return ctrl.Result{}, err
+		}
+		p.Managed.Set(p.Source, key, 0)
+		return ctrl.Result{}, nil
 	}
 
 	ov, err := annotations.ParseOverrides(obj.GetAnnotations())
@@ -130,6 +141,7 @@ func reconcileHostBasedResource(
 			return ctrl.Result{}, err
 		}
 		if specsMatch(desired, existingIDs, liveSpecs) {
+			p.Managed.Set(p.Source, key, len(existingIDs))
 			if err := syncTagsForHosts(ctx, p.Kuma, p.Recorder, obj, existingIDs, tags); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -149,6 +161,7 @@ func reconcileHostBasedResource(
 		if err := persistMonitorIDs(ctx, p.Client, obj, newIDs, true, hash); err != nil {
 			return ctrl.Result{}, err
 		}
+		p.Managed.Set(p.Source, key, len(newIDs))
 		if err := syncTagsForHosts(ctx, p.Kuma, p.Recorder, obj, newIDs, tags); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -165,6 +178,7 @@ func reconcileHostBasedResource(
 	if err := persistMonitorIDs(ctx, p.Client, obj, newIDs, true, hash); err != nil {
 		return ctrl.Result{}, err
 	}
+	p.Managed.Set(p.Source, key, len(newIDs))
 	if err := syncTagsForHosts(ctx, p.Kuma, p.Recorder, obj, newIDs, tags); err != nil {
 		return ctrl.Result{}, err
 	}

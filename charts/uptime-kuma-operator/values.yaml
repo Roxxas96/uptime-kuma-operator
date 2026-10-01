@@ -66,6 +66,34 @@ service:
   enabled: false
   port: 8080
 
+# Creates a Prometheus Operator ServiceMonitor scraping the metrics Service.
+# Requires service.enabled and the monitoring.coreos.com CRDs.
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  # Extra labels, e.g. {release: kube-prometheus-stack} to match your
+  # Prometheus' serviceMonitorSelector.
+  labels: {}
+
+# Additionally pushes the operator's OpenTelemetry metrics over OTLP/gRPC.
+# Leave endpoint empty to disable. Only the uptime_kuma_operator_* metrics
+# are pushed; controller-runtime's built-ins are Prometheus-only. With
+# networkPolicy.enabled, add an extraEgress rule for the collector.
+otlp:
+  endpoint: "" # e.g. http://otel-collector.observability:4317
+  insecure: false
+  exportIntervalSeconds: 60
+
+# Ships the Grafana dashboard (dashboards/uptime-kuma-operator.json) as a
+# ConfigMap for the Grafana dashboard sidecar, as deployed by
+# kube-prometheus-stack or the grafana chart.
+grafanaDashboard:
+  enabled: false
+  namespace: "" # defaults to the release namespace
+  labels:
+    grafana_dashboard: "1"
+  annotations: {} # e.g. {grafana_folder: Operators}
+
 # Restricts the operator pod's egress via a NetworkPolicy. Off by default —
 # the Kuma URL is user-supplied and may be inside or outside the cluster, so
 # a safe default egress policy can't be inferred generically. When enabled,

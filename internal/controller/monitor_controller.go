@@ -19,6 +19,7 @@ import (
 	uptimekumaiov1alpha1 "uptime-kuma-operator/api/v1alpha1"
 	"uptime-kuma-operator/internal/annotations"
 	"uptime-kuma-operator/internal/kuma"
+	"uptime-kuma-operator/internal/telemetry"
 )
 
 type MonitorReconciler struct {
@@ -37,6 +38,8 @@ type MonitorReconciler struct {
 	// label-tag inference for every monitor this reconciler manages. See
 	// sync.go's deriveLabelTags doc comment.
 	LabelTagPatterns []*regexp.Regexp
+	// Managed feeds the managed-monitors gauge; nil records nothing.
+	Managed *telemetry.ManagedMonitors
 }
 
 func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -46,6 +49,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := r.Client.Get(ctx, req.NamespacedName, mon); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.V(1).Info("Monitor not found, assuming it was deleted")
+			r.Managed.Set(telemetry.SourceMonitor, req.NamespacedName, 0)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -71,6 +75,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				return ctrl.Result{}, err
 			}
 		}
+		r.Managed.Set(telemetry.SourceMonitor, req.NamespacedName, 0)
 		return ctrl.Result{}, nil
 	}
 
@@ -147,6 +152,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 					recordSyncFailure(r.Recorder, mon, err)
 					return ctrl.Result{}, err
 				}
+				r.Managed.Set(telemetry.SourceMonitor, req.NamespacedName, 1)
 				log.V(1).Info("Kuma monitor matches desired state, nothing to do", "monitorID", existingID)
 				return ctrl.Result{RequeueAfter: r.DriftCheckInterval}, nil
 			}
@@ -181,6 +187,7 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := r.updateStatus(ctx, mon, strconv.FormatInt(newID, 10), generationToSync, metav1.ConditionTrue, "Synced", "monitor synced to Kuma"); err != nil {
 		return ctrl.Result{}, err
 	}
+	r.Managed.Set(telemetry.SourceMonitor, req.NamespacedName, 1)
 
 	if err := syncTags(ctx, r.Kuma, newID, mergeTags(r.DefaultTags, mon.Spec.Tags, deriveLabelTags(mon.Labels, r.LabelTagPatterns))); err != nil {
 		recordSyncFailure(r.Recorder, mon, err)
