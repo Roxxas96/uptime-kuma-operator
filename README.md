@@ -130,14 +130,13 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup (`mise install` +
 
 ## Releasing
 
-1. Bump `version` (and, if the app changed, leave `appVersion` — CI
-   resolves it from the tag) in `charts/uptime-kuma-operator/Chart.yaml`,
-   in the PR that includes the change.
-2. Tag the merge commit on `main` and push the tag: `git tag v0.1.0 &&
-   git push origin v0.1.0` (`vX.Y.Z`, or `vX.Y.Z-rcN` for a prerelease).
-3. CI's `release` job (`.github/workflows/ci.yml`) takes it from there:
-   it fails fast if `Chart.yaml`'s `version` doesn't match the tag,
-   otherwise it packages the chart, pushes it to
+1. Tag a commit on `main` and push the tag: `git tag -s v0.1.0 -m v0.1.0
+   && git push origin v0.1.0` (`vX.Y.Z`, or `vX.Y.Z-rcN` for a
+   prerelease). Tags must be signed. No version bump is needed:
+   `Chart.yaml`'s `version` is a placeholder.
+2. CI's `release` job (`.github/workflows/ci.yml`) takes it from there:
+   it packages the chart with its `version` and `appVersion` set from the
+   tag, pushes it to
    `oci://ghcr.io/roxxas96/uptime-kuma-operator/charts`, and creates the
    GitHub Release with auto-generated notes and the packaged chart
    attached. The Docker image (already built/signed by the `build` job

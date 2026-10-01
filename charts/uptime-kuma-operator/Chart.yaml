@@ -2,7 +2,9 @@ apiVersion: v2
 name: uptime-kuma-operator
 description: Syncs Uptime Kuma monitors from Ingress, HTTPRoute, and a Monitor CRD
 type: application
-version: 0.3.0
+# Placeholder: CI's release job sets the real version (and appVersion) from
+# the git tag when packaging, so this is never bumped by hand.
+version: 0.0.0-dev
 appVersion: "main"
 kubeVersion: ">=1.23.0-0"
 keywords:
