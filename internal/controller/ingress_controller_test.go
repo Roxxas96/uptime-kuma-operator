@@ -5,7 +5,11 @@ import (
 	"errors"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +21,7 @@ import (
 	"uptime-kuma-operator/internal/annotations"
 	"uptime-kuma-operator/internal/config"
 	"uptime-kuma-operator/internal/kuma"
+	"uptime-kuma-operator/internal/telemetry"
 )
 
 func newIngressReconciler(optInByDefault bool) (*IngressReconciler, *kuma.FakeClient) {
@@ -781,5 +786,62 @@ func TestIngressReconciler_AppliesLabelDerivedTags(t *testing.T) {
 	tagIDs := fake.MonitorTags[id]
 	if len(tagIDs) != 1 {
 		t.Errorf("MonitorTags[id] = %v, want 1 entry", tagIDs)
+	}
+}
+
+func TestIngressReconciler_TracksManagedMonitorsGauge(t *testing.T) {
+	ctx := context.Background()
+	reg := prometheus.NewRegistry()
+	mp, shutdown, err := telemetry.Setup(ctx, reg, func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("telemetry.Setup: %v", err)
+	}
+	defer func() { _ = shutdown(ctx) }()
+	managed, err := telemetry.NewManagedMonitors(mp)
+	if err != nil {
+		t.Fatalf("NewManagedMonitors: %v", err)
+	}
+
+	r, _ := newIngressReconciler(false)
+	r.Managed = managed
+
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gauge", Namespace: "default",
+			Annotations: map[string]string{annotations.Enabled: "true"},
+		},
+		Spec: networkingv1.IngressSpec{Rules: []networkingv1.IngressRule{
+			{Host: "a.example.com"}, {Host: "b.example.com"},
+		}},
+	}
+	if err := k8sClient.Create(ctx, ing); err != nil {
+		t.Fatalf("create Ingress: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: ing.Name, Namespace: ing.Namespace}}
+
+	want := `
+# HELP uptime_kuma_operator_managed_monitors Number of Uptime Kuma monitors managed by the operator.
+# TYPE uptime_kuma_operator_managed_monitors gauge
+uptime_kuma_operator_managed_monitors{resource_namespace="default",source="ingress"} 2
+`
+	// The first reconcile takes the full-sync path, the second the
+	// unchanged-hash drift-check path; both must report the monitors.
+	for i := range 2 {
+		if _, err := r.Reconcile(ctx, req); err != nil {
+			t.Fatalf("Reconcile #%d: %v", i+1, err)
+		}
+		if err := testutil.GatherAndCompare(reg, strings.NewReader(want), "uptime_kuma_operator_managed_monitors"); err != nil {
+			t.Errorf("after reconcile #%d: %v", i+1, err)
+		}
+	}
+
+	if err := k8sClient.Delete(ctx, ing); err != nil {
+		t.Fatalf("delete Ingress: %v", err)
+	}
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile after delete: %v", err)
+	}
+	if n, err := testutil.GatherAndCount(reg, "uptime_kuma_operator_managed_monitors"); err != nil || n != 0 {
+		t.Errorf("after delete: want 0 series, got %d (err %v)", n, err)
 	}
 }

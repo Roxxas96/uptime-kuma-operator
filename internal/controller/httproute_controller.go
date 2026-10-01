@@ -15,6 +15,7 @@ import (
 	"uptime-kuma-operator/internal/annotations"
 	"uptime-kuma-operator/internal/derive"
 	"uptime-kuma-operator/internal/kuma"
+	"uptime-kuma-operator/internal/telemetry"
 )
 
 type HTTPRouteReconciler struct {
@@ -36,6 +37,8 @@ type HTTPRouteReconciler struct {
 	// label-tag inference for every monitor this reconciler manages. See
 	// sync.go's deriveLabelTags doc comment.
 	LabelTagPatterns []*regexp.Regexp
+	// Managed feeds the managed-monitors gauge; nil records nothing.
+	Managed *telemetry.ManagedMonitors
 }
 
 func (r *HTTPRouteReconciler) params() hostReconcilerParams {
@@ -47,6 +50,8 @@ func (r *HTTPRouteReconciler) params() hostReconcilerParams {
 		DriftCheckInterval: r.DriftCheckInterval,
 		DefaultTags:        r.DefaultTags,
 		LabelTagPatterns:   r.LabelTagPatterns,
+		Managed:            r.Managed,
+		Source:             telemetry.SourceHTTPRoute,
 	}
 }
 
@@ -57,6 +62,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.Client.Get(ctx, req.NamespacedName, route); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.V(1).Info("HTTPRoute not found, assuming it was deleted")
+			r.Managed.Set(telemetry.SourceHTTPRoute, req.NamespacedName, 0)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err

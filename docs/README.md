@@ -522,6 +522,15 @@ correction).
   `kubectl describe ingress/httproute <name>` for `SyncFailed` Events, or
   the operator's logs.
 
+**Metrics.** The operator serves Prometheus metrics on `:8080/metrics`
+(`--set service.enabled=true` exposes them; `serviceMonitor.enabled` adds a
+Prometheus Operator `ServiceMonitor`): how many monitors it manages per
+source and namespace, every call it makes to Uptime Kuma with its latency
+and outcome, and controller-runtime's reconcile and workqueue metrics.
+`--set grafanaDashboard.enabled=true` installs a Grafana dashboard for
+them. See the [main README's Monitoring section](../README.md#monitoring)
+for the metric list and OTLP export.
+
 ## Uninstalling
 
 `helm uninstall` removes the Deployment, RBAC, and ServiceAccount, but —

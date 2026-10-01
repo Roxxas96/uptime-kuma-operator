@@ -110,3 +110,15 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: {{ printf "k8s.namespace.name=%s,k8s.deployment.name=%s" .Release.Namespace (include "uptime-kuma-operator.fullname" .) | quote }}
+            {{- with .Values.otlp }}
+            {{- if .endpoint }}
+            - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+              value: {{ .endpoint | quote }}
+            - name: OTEL_EXPORTER_OTLP_METRICS_INSECURE
+              value: {{ .insecure | quote }}
+            - name: OTEL_METRIC_EXPORT_INTERVAL
+              value: {{ mul .exportIntervalSeconds 1000 | quote }}
+            {{- end }}
+            {{- end }}

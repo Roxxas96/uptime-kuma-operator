@@ -108,6 +108,43 @@ internal design.
    kubectl apply -f config/samples/uptime-kuma_v1alpha1_monitor.yaml
    ```
 
+## Monitoring
+
+The operator records metrics with the OpenTelemetry SDK and serves them in
+Prometheus format on `:8080/metrics` (exposed by the chart's Service when
+`service.enabled=true`). The same endpoint carries controller-runtime's
+built-in reconcile, workqueue, Kubernetes client and Go runtime metrics.
+
+| Metric | Type | Labels |
+| --- | --- | --- |
+| `uptime_kuma_operator_managed_monitors` | gauge | `source` (`ingress`, `httproute`, `service`, `monitor`), `resource_namespace` |
+| `uptime_kuma_operator_kuma_requests_total` | counter | `operation` (`create`, `update`, `delete`, `list_monitors`, `list_notifications`, `find_group`, `list_tags`, `create_tag`, `set_monitor_tags`), `outcome` (`success`, `error`) |
+| `uptime_kuma_operator_kuma_request_duration_seconds` | histogram | `operation`, `outcome` |
+
+To also push the operator's metrics over OTLP/gRPC, set
+`otlp.endpoint` (or the standard `OTEL_EXPORTER_OTLP_ENDPOINT` /
+`OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` env vars; `OTEL_METRICS_EXPORTER=none`
+turns it off). Only the `uptime_kuma_operator_*` metrics are pushed;
+controller-runtime's built-ins stay Prometheus-only.
+
+The chart can wire this into a Prometheus Operator / Grafana setup such as
+kube-prometheus-stack:
+
+```bash
+helm upgrade uptime-kuma-operator charts/uptime-kuma-operator --reuse-values \
+  --set service.enabled=true \
+  --set serviceMonitor.enabled=true \
+  --set serviceMonitor.labels.release=kube-prometheus-stack \
+  --set grafanaDashboard.enabled=true
+```
+
+`grafanaDashboard.enabled` ships
+`charts/uptime-kuma-operator/dashboards/uptime-kuma-operator.json` as a
+ConfigMap labelled `grafana_dashboard: "1"` for Grafana's dashboard sidecar.
+You can also import that file into Grafana by hand. It expects a Prometheus
+data source and finds the operator through its `target_info{service_name="uptime-kuma-operator"}`
+series, so keep the default `OTEL_SERVICE_NAME`.
+
 ## Development
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup (`mise install` +

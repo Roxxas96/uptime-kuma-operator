@@ -54,6 +54,15 @@ as values.
 | `nodeSelector` / `tolerations` / `affinity` | `{}` / `[]` / `{}` | Standard scheduling controls. |
 | `service.enabled` | `false` | Expose the metrics port (`:8080`, plain HTTP, unauthenticated) via a ClusterIP Service. |
 | `service.port` | `8080` | Service port for metrics. |
+| `serviceMonitor.enabled` | `false` | Create a Prometheus Operator `ServiceMonitor` for the metrics Service. Requires `service.enabled`. |
+| `serviceMonitor.interval` | `30s` | Scrape interval. |
+| `serviceMonitor.labels` | `{}` | Extra labels, e.g. `{release: kube-prometheus-stack}` to match your Prometheus' selector. |
+| `otlp.endpoint` | `""` | Also push the operator's OpenTelemetry metrics to this OTLP/gRPC endpoint. Empty disables it. |
+| `otlp.insecure` | `false` | Use plaintext gRPC to the OTLP endpoint. |
+| `otlp.exportIntervalSeconds` | `60` | OTLP push interval. |
+| `grafanaDashboard.enabled` | `false` | Ship the Grafana dashboard as a ConfigMap for the Grafana dashboard sidecar. |
+| `grafanaDashboard.namespace` | `""` | Namespace for the dashboard ConfigMap; defaults to the release namespace. |
+| `grafanaDashboard.labels` / `annotations` | `{grafana_dashboard: "1"}` / `{}` | Metadata the Grafana sidecar selects on, e.g. a `grafana_folder` annotation. |
 | `networkPolicy.enabled` | `false` | Lock down pod ingress/egress. Blocks all traffic except DNS and the Kubernetes API by default. |
 | `networkPolicy.kubeApiServerCIDR` | `""` | Restrict API server egress to this CIDR; otherwise allowed on 443/6443 to any destination. |
 | `networkPolicy.extraEgress` / `extraIngress` | `[]` | Additional raw `NetworkPolicyEgressRule`/`NetworkPolicyIngressRule` entries — needed for reaching `kuma.url`, and for `service.enabled` scraping, respectively. |

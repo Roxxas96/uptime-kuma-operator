@@ -16,12 +16,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	uptimekumaiov1alpha1 "uptime-kuma-operator/api/v1alpha1"
 	"uptime-kuma-operator/internal/config"
 	"uptime-kuma-operator/internal/controller"
 	"uptime-kuma-operator/internal/kuma"
+	"uptime-kuma-operator/internal/telemetry"
 )
 
 var scheme = clientgoscheme.Scheme
@@ -60,7 +62,27 @@ func main() {
 	log = ctrl.Log.WithName("setup")
 
 	ctx := context.Background()
-	kumaClient, err := kuma.NewClient(ctx, cfg.KumaURL, kuma.Credentials{
+
+	// OTel metrics are registered into controller-runtime's Prometheus
+	// registry, so they are served on the manager's /metrics endpoint next to
+	// its built-in reconcile and workqueue metrics.
+	meterProvider, shutdownTelemetry, err := telemetry.Setup(ctx, ctrlmetrics.Registry, os.Getenv)
+	if err != nil {
+		log.Error(err, "unable to set up telemetry")
+		os.Exit(1)
+	}
+	defer func() {
+		if err := shutdownTelemetry(context.Background()); err != nil {
+			log.Error(err, "unable to flush telemetry")
+		}
+	}()
+	managed, err := telemetry.NewManagedMonitors(meterProvider)
+	if err != nil {
+		log.Error(err, "unable to register managed monitors gauge")
+		os.Exit(1)
+	}
+
+	rawKumaClient, err := kuma.NewClient(ctx, cfg.KumaURL, kuma.Credentials{
 		Username:     cfg.KumaUsername,
 		Password:     cfg.KumaPassword,
 		TOTPSecret:   cfg.KumaTOTPSecret,
@@ -71,6 +93,11 @@ func main() {
 	})
 	if err != nil {
 		log.Error(err, "unable to connect to Uptime Kuma")
+		os.Exit(1)
+	}
+	kumaClient, err := kuma.Instrument(rawKumaClient, meterProvider.Meter(telemetry.MeterName))
+	if err != nil {
+		log.Error(err, "unable to instrument Uptime Kuma client")
 		os.Exit(1)
 	}
 
@@ -117,7 +144,7 @@ func main() {
 	if err := (&controller.IngressReconciler{
 		Client: mgr.GetClient(), Kuma: kumaClient, OptInByDefault: cfg.OptInByDefault,
 		Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval, DefaultTags: cfg.DefaultTags,
-		LabelTagPatterns: cfg.LabelTagPatterns,
+		LabelTagPatterns: cfg.LabelTagPatterns, Managed: managed,
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create Ingress controller")
 		os.Exit(1)
@@ -126,7 +153,7 @@ func main() {
 	if err := (&controller.ServiceReconciler{
 		Client: mgr.GetClient(), Kuma: kumaClient, OptInByDefault: cfg.OptInByDefault,
 		Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval, DefaultTags: cfg.DefaultTags,
-		LabelTagPatterns: cfg.LabelTagPatterns,
+		LabelTagPatterns: cfg.LabelTagPatterns, Managed: managed,
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create Service controller")
 		os.Exit(1)
@@ -134,7 +161,7 @@ func main() {
 
 	if err := (&controller.MonitorReconciler{
 		Client: mgr.GetClient(), Kuma: kumaClient, Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval,
-		DefaultTags: cfg.DefaultTags, LabelTagPatterns: cfg.LabelTagPatterns,
+		DefaultTags: cfg.DefaultTags, LabelTagPatterns: cfg.LabelTagPatterns, Managed: managed,
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create Monitor controller")
 		os.Exit(1)
@@ -145,7 +172,7 @@ func main() {
 		if err := (&controller.HTTPRouteReconciler{
 			Client: mgr.GetClient(), Kuma: kumaClient, OptInByDefault: cfg.OptInByDefault,
 			Recorder: recorder, DriftCheckInterval: cfg.DriftCheckInterval, DefaultTags: cfg.DefaultTags,
-			LabelTagPatterns: cfg.LabelTagPatterns,
+			LabelTagPatterns: cfg.LabelTagPatterns, Managed: managed,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create HTTPRoute controller")
 			os.Exit(1)
@@ -159,6 +186,8 @@ func main() {
 		"defaultTags", cfg.DefaultTags, "labelTagPatternCount", len(cfg.LabelTagPatterns))
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Error(err, "manager exited with error")
+		// os.Exit skips deferred calls; flush pending OTLP exports first.
+		_ = shutdownTelemetry(context.Background())
 		os.Exit(1)
 	}
 }
