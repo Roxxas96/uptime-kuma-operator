@@ -83,16 +83,15 @@ spec:
           env:
             - name: KUMA_URL
               value: {{ required "kuma.url is required" .Values.kuma.url | quote }}
-            - name: KUMA_USERNAME
+            {{- $secret := required "kuma.existingSecret is required" .Values.kuma.existingSecret }}
+            {{- range $env, $key := dict "KUMA_USERNAME" "username" "KUMA_PASSWORD" "password" "KUMA_TOTP_SECRET" "totpSecret" "KUMA_SESSION_TOKEN" "sessionToken" }}
+            - name: {{ $env }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ required "kuma.existingSecret is required" .Values.kuma.existingSecret }}
-                  key: username
-            - name: KUMA_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ required "kuma.existingSecret is required" .Values.kuma.existingSecret }}
-                  key: password
+                  name: {{ $secret }}
+                  key: {{ $key }}
+                  optional: true
+            {{- end }}
             - name: WATCH_ALL
               value: {{ .Values.watchAll | quote }}
             - name: WATCH_NAMESPACES

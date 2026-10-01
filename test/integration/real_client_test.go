@@ -32,7 +32,7 @@ func TestRealClient_CreateUpdateDelete(t *testing.T) {
 
 	bootstrapKuma(t, ctx, url, user, pass)
 
-	client, err := kuma.NewClient(ctx, url, user, pass)
+	client, err := kuma.NewClient(ctx, url, kuma.Credentials{Username: user, Password: pass})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestRealClient_CreateUpdateDelete(t *testing.T) {
 	// directly in the Kuma UI — via a second, independent client
 	// connection, and confirm ExistingSpecs reports the *new* live
 	// configuration, not what the operator originally sent.
-	editor, err := kuma.NewClient(ctx, url, user, pass)
+	editor, err := kuma.NewClient(ctx, url, kuma.Credentials{Username: user, Password: pass})
 	if err != nil {
 		t.Fatalf("NewClient (editor): %v", err)
 	}
