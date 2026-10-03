@@ -138,6 +138,12 @@ func main() {
 		log.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+	// Not ready while there is no live Kuma connection. Liveness stays a plain
+	// ping: a restart would not bring Kuma back.
+	if err := mgr.AddReadyzCheck("kuma", rawKumaClient.ReadyCheck); err != nil {
+		log.Error(err, "unable to set up Uptime Kuma ready check")
+		os.Exit(1)
+	}
 
 	recorder := mgr.GetEventRecorderFor("uptime-kuma-operator") //nolint:staticcheck // GetEventRecorder returns a different EventRecorder type (events.k8s.io/v1); migrating also needs new RBAC verbs and reconciler field types — tracked as a follow-up, not done here
 

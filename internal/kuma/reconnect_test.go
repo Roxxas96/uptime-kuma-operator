@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,12 +27,15 @@ func (c *closableFake) Close() error {
 
 // dialer hands out a new closableFake per dial and counts the dials.
 type dialer struct {
+	mu      sync.Mutex
 	dials   int
 	clients []*closableFake
 	err     error
 }
 
 func (d *dialer) dial() (Client, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.dials++
 	if d.err != nil {
 		return nil, d.err
@@ -47,7 +51,7 @@ func (d *dialer) dial() (Client, error) {
 var errClosedConn = fmt.Errorf("get monitors: getMonitorList: %w",
 	&net.OpError{Op: "write", Net: "tcp", Err: net.ErrClosed})
 
-func newTestClient(t *testing.T) (*reconnectingClient, *dialer, *closableFake) {
+func newTestClient(t *testing.T) (*ReconnectingClient, *dialer, *closableFake) {
 	t.Helper()
 	d := &dialer{}
 	initial, err := d.dial()
@@ -181,5 +185,64 @@ func TestReconnectingClient_StaleFailureKeepsNewConnection(t *testing.T) {
 	}
 	if d.dials != 1 {
 		t.Fatalf("dials = %d, want 1: the replacement connection was discarded", d.dials)
+	}
+}
+
+func (d *dialer) setErr(err error) {
+	d.mu.Lock()
+	d.err = err
+	d.mu.Unlock()
+}
+
+func (d *dialer) dialCount() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.dials
+}
+
+func TestReconnectingClient_ReadyCheck(t *testing.T) {
+	ctx := context.Background()
+	r, d, first := newTestClient(t)
+
+	if err := r.ReadyCheck(nil); err != nil {
+		t.Fatalf("ready with the initial connection: %v", err)
+	}
+
+	// Kuma goes away: the failing call marks the client not ready, and
+	// while Kuma stays down the probe keeps failing with the dial error.
+	d.setErr(errors.New("connect to server: dial tcp: connection refused"))
+	first.ExistingSpecsErr = errClosedConn
+	_, _ = r.ExistingSpecs(ctx)
+	if err := r.ReadyCheck(nil); err == nil || !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("ReadyCheck after connection loss = %v, want the lost-connection error", err)
+	}
+	waitFor(t, "a background dial while Kuma is down", func() bool {
+		return d.dialCount() >= 1 && errors.Is(readyErr(r), d.err)
+	})
+
+	// Kuma comes back: with no reconcile calling in, the probe's own
+	// background dial brings the client back to ready.
+	d.setErr(nil)
+	waitFor(t, "ready once Kuma is back", func() bool { return r.ReadyCheck(nil) == nil })
+
+	if _, err := r.ExistingSpecs(ctx); err != nil {
+		t.Fatalf("call on the connection the probe dialed: %v", err)
+	}
+}
+
+func readyErr(r *ReconnectingClient) error {
+	r.stateMu.Lock()
+	defer r.stateMu.Unlock()
+	return r.down
+}
+
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }

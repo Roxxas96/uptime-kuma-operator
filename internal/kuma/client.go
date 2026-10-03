@@ -89,9 +89,9 @@ type Credentials struct {
 //
 // The returned Client reconnects on its own: a call that finds the connection
 // lost fails, and the next call dials a new one with the same ctx and
-// credentials (see reconnectingClient). ctx must therefore live as long as the
+// credentials (see ReconnectingClient). ctx must therefore live as long as the
 // Client is used.
-func NewClient(ctx context.Context, url string, creds Credentials) (Client, error) {
+func NewClient(ctx context.Context, url string, creds Credentials) (*ReconnectingClient, error) {
 	dial := func() (Client, error) { return newClient(ctx, url, creds, connectTimeout) }
 	initial, err := dial()
 	if err != nil {
