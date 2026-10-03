@@ -86,8 +86,18 @@ type Credentials struct {
 // successfully-connected client. bremlkuma.WithConnectTimeout bounds the
 // connection attempt on its own, independent of ctx's cancellation state,
 // which is what actually fixes the original hang.
+//
+// The returned Client reconnects on its own: a call that finds the connection
+// lost fails, and the next call dials a new one with the same ctx and
+// credentials (see reconnectingClient). ctx must therefore live as long as the
+// Client is used.
 func NewClient(ctx context.Context, url string, creds Credentials) (Client, error) {
-	return newClient(ctx, url, creds, connectTimeout)
+	dial := func() (Client, error) { return newClient(ctx, url, creds, connectTimeout) }
+	initial, err := dial()
+	if err != nil {
+		return nil, err
+	}
+	return newReconnectingClient(initial, dial), nil
 }
 
 func newClient(ctx context.Context, url string, creds Credentials, timeout time.Duration) (Client, error) {
@@ -106,6 +116,11 @@ func newClient(ctx context.Context, url string, creds Credentials, timeout time.
 		return nil, err
 	}
 	return &realClient{inner: c}, nil
+}
+
+// Close closes the Socket.IO connection.
+func (r *realClient) Close() error {
+	return r.inner.Disconnect()
 }
 
 func (r *realClient) Upsert(ctx context.Context, id int64, spec MonitorSpec) (int64, error) {
