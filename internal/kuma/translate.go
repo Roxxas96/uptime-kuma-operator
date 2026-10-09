@@ -209,6 +209,17 @@ func ToBremlMonitor(id int64, spec MonitorSpec) (bremlmonitor.Monitor, error) {
 		}
 		return &bremlmonitor.GameDig{Base: base, GameDigDetails: details}, nil
 
+	case TypePush:
+		if spec.Push == nil {
+			return nil, fmt.Errorf("kuma: monitor type %s requires the Push field to be set", TypePush)
+		}
+		if spec.Push.Token == "" {
+			// Kuma doesn't generate a token server-side (its UI does), so an
+			// empty one would leave the monitor with no reachable push URL.
+			return nil, fmt.Errorf("kuma: monitor type %s requires a non-empty push token", TypePush)
+		}
+		return &bremlmonitor.Push{Base: base, PushDetails: bremlmonitor.PushDetails{PushToken: spec.Push.Token}}, nil
+
 	default:
 		return nil, fmt.Errorf("kuma: unknown monitor type %q", spec.Type)
 	}
@@ -308,6 +319,13 @@ func FromBremlMonitor(base bremlmonitor.Base) (MonitorSpec, error) {
 			gamedig.Token = *d.GameDigToken
 		}
 		spec.Gamedig = gamedig
+	case "push":
+		spec.Type = TypePush
+		var d bremlmonitor.Push
+		if err := base.As(&d); err != nil {
+			return MonitorSpec{}, fmt.Errorf("kuma: decode Push monitor %d: %w", base.GetID(), err)
+		}
+		spec.Push = &PushSpec{Token: d.PushToken}
 	default:
 		return MonitorSpec{}, fmt.Errorf("kuma: unknown live monitor type %q (id %d)", base.Type(), base.GetID())
 	}
@@ -352,6 +370,8 @@ func Equivalent(desired, live MonitorSpec) bool {
 		return d.DNS != nil && live.DNS != nil && *d.DNS == *live.DNS
 	case TypeGamedig:
 		return d.Gamedig != nil && live.Gamedig != nil && *d.Gamedig == *live.Gamedig
+	case TypePush:
+		return d.Push != nil && live.Push != nil && *d.Push == *live.Push
 	default:
 		return false
 	}

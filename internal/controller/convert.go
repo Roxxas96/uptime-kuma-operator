@@ -74,5 +74,10 @@ func toKumaSpec(spec uptimekumaiov1alpha1.MonitorSpec) kuma.MonitorSpec {
 			DomainExpiryNotification: spec.Gamedig.DomainExpiryNotification,
 		}
 	}
+	if spec.Push != nil {
+		// Token is resolved separately in monitor_controller.go, like the
+		// other SecretKeySelector-backed fields.
+		out.Push = &kuma.PushSpec{}
+	}
 	return out
 }

@@ -2,7 +2,7 @@
   Security note: the "secrets" get rule below is intentionally broad — it
   grants read access to any Secret (by name) in every watched namespace
   (or cluster-wide under watchAll), because the operator resolves
-  HTTP-auth/Gamedig-token Secrets referenced by arbitrary Monitor/Ingress/
+  HTTP-auth/Gamedig-token/push-token Secrets referenced by arbitrary Monitor/Ingress/
   HTTPRoute resources whose names aren't known ahead of time, so RBAC
   resourceNames can't scope this down generically. Secrets are never
   listed or cached (see cmd/main.go), only fetched one-by-one by name, but

@@ -101,7 +101,7 @@ internal design.
    for the full design.
 
 4. Or declare a monitor Kuma can't derive from routing (DNS, Gamedig, TCP,
-   Ping) with a `Monitor` CR — see
+   Ping, Push) with a `Monitor` CR — see
    `config/samples/uptime-kuma_v1alpha1_monitor.yaml`:
 
    ```bash

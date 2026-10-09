@@ -3,6 +3,8 @@ package controller
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
+
 	uptimekumaiov1alpha1 "uptime-kuma-operator/api/v1alpha1"
 	"uptime-kuma-operator/internal/kuma"
 )
@@ -149,5 +151,28 @@ func TestToKumaSpec_GamedigFields(t *testing.T) {
 	}
 	if !got.Gamedig.GivenPortOnly || !got.Gamedig.DomainExpiryNotification {
 		t.Errorf("Gamedig fields = %+v, want GivenPortOnly/DomainExpiryNotification applied", got.Gamedig)
+	}
+}
+
+func TestToKumaSpec_Push(t *testing.T) {
+	crd := uptimekumaiov1alpha1.MonitorSpec{
+		Type: uptimekumaiov1alpha1.MonitorTypePush,
+		Name: "nightly-backup",
+		Push: &uptimekumaiov1alpha1.PushMonitorSpec{
+			TokenSecretRef: corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "backup-push"}, Key: "token",
+			},
+		},
+	}
+
+	got := toKumaSpec(crd)
+	if got.Type != kuma.TypePush {
+		t.Errorf("Type = %q, want %q", got.Type, kuma.TypePush)
+	}
+	if got.Push == nil {
+		t.Fatal("Push is nil")
+	}
+	if got.Push.Token != "" {
+		t.Errorf("Push.Token = %q, want empty (resolved by the reconciler, not toKumaSpec)", got.Push.Token)
 	}
 }

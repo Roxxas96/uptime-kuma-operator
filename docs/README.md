@@ -35,7 +35,7 @@ three kinds of resources:
   hostname, if the HTTPRoute CRD is installed in your cluster. If it
   isn't, the operator simply skips this watcher — no error, no crash loop.
 - **`Monitor`** — a CRD this chart installs, for monitor types routing
-  can't express: DNS, TCP, Ping, and Gamedig, plus HTTP monitors that need
+  can't express: DNS, TCP, Ping, Gamedig, and Push, plus HTTP monitors that need
   more control (auth, notifications, groups, proxies) than an annotation
   can carry.
 
@@ -326,7 +326,7 @@ spec:
 ## The Monitor CRD
 
 Reach for a `Monitor` custom resource when you need a monitor type
-routing can't express (DNS, TCP, Ping, Gamedig), or an HTTP monitor with
+routing can't express (DNS, TCP, Ping, Gamedig, Push), or an HTTP monitor with
 authentication, notifications, a group, or a proxy — fields too rich for
 an annotation.
 
@@ -348,7 +348,7 @@ kubectl describe monitor http-auth-sample   # Ready condition + any SyncFailed e
 
 | Field | Notes |
 |---|---|
-| `type` | One of `HTTP`, `TCP`, `Ping`, `DNS`, `Gamedig` — required, and must match exactly one of the type-specific blocks below |
+| `type` | One of `HTTP`, `TCP`, `Ping`, `DNS`, `Gamedig`, `Push` — required, and must match exactly one of the type-specific blocks below |
 | `name` | Monitor name in Kuma |
 | `interval`, `retries`, `retryInterval` | Check timing |
 | `description` | Shown in the Kuma UI |
@@ -356,7 +356,7 @@ kubectl describe monitor http-auth-sample   # Ready condition + any SyncFailed e
 | `upsideDown` | Inverts up/down |
 | `notifications` | Notification channel names; each must already exist in Kuma |
 | `group` | Parent group monitor name; must already exist in Kuma |
-| `proxy` | Kuma proxy ID |
+| `proxy` | Kuma proxy ID. Not allowed with `type: Push` |
 | `tags` | Tag names; a tag that doesn't exist yet is created automatically. Declarative — an empty/omitted list **clears** any tags currently on the monitor, including ones added by hand in Kuma |
 
 ### Type-specific fields
@@ -430,6 +430,21 @@ kubectl describe monitor http-auth-sample   # Ready condition + any SyncFailed e
 
 </details>
 
+<details>
+<summary><code>spec.push</code></summary>
+
+| Field | Notes |
+|---|---|
+| `tokenSecretRef` | required push token, `SecretKeySelector`, same namespace. Must be non-empty |
+
+A Push monitor is passive: Kuma marks it down when no heartbeat arrives
+within `interval`. The monitored job reports in by calling
+`<Kuma base URL>/api/push/<token>?status=up&msg=OK&ping=`, so mount the
+same Secret into it. You choose the token — Kuma's UI generates 32
+alphanumeric characters, e.g. `openssl rand -hex 16`.
+
+</details>
+
 Every `*SecretKeySelector` field points at a `Secret` the operator does
 **not** create or manage — create it yourself, in the same namespace as
 the `Monitor`.
@@ -466,7 +481,7 @@ stringData:
   password: correct-horse-battery-staple
 ```
 
-More worked examples (Gamedig, plain HTTP) live in
+More worked examples (Gamedig, Push, plain HTTP) live in
 [`config/samples/uptime-kuma_v1alpha1_monitor.yaml`](../config/samples/uptime-kuma_v1alpha1_monitor.yaml).
 
 ## Tags, notifications, groups, and proxies

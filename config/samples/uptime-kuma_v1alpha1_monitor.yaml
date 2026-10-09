@@ -65,3 +65,27 @@ metadata:
 type: Opaque
 stringData:
   password: correct-horse-battery-staple
+---
+apiVersion: uptime-kuma.io/v1alpha1
+kind: Monitor
+metadata:
+  name: push-sample
+spec:
+  type: Push
+  name: "Sample Nightly Backup"
+  # Down if no heartbeat arrives within 25 hours.
+  interval: 90000
+  push:
+    tokenSecretRef:
+      name: push-sample-token
+      key: token
+---
+# The backup job reports in with:
+#   curl -fsS "<Kuma base URL>/api/push/$TOKEN?status=up&msg=OK"
+apiVersion: v1
+kind: Secret
+metadata:
+  name: push-sample-token
+type: Opaque
+stringData:
+  token: replace-with-a-random-token

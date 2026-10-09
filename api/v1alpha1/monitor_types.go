@@ -5,7 +5,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// +kubebuilder:validation:Enum=HTTP;TCP;Ping;DNS;Gamedig
+// +kubebuilder:validation:Enum=HTTP;TCP;Ping;DNS;Gamedig;Push
 type MonitorType string
 
 const (
@@ -14,6 +14,7 @@ const (
 	MonitorTypePing    MonitorType = "Ping"
 	MonitorTypeDNS     MonitorType = "DNS"
 	MonitorTypeGamedig MonitorType = "Gamedig"
+	MonitorTypePush    MonitorType = "Push"
 )
 
 // +kubebuilder:object:generate=true
@@ -121,20 +122,34 @@ type GamedigMonitorSpec struct {
 	TokenSecretRef *corev1.SecretKeySelector `json:"tokenSecretRef,omitempty"`
 }
 
-// The first five rules require the sub-struct matching spec.type; the second
-// five reject every other sub-struct, so the discriminator is exclusive rather
-// than silently ignoring extra configuration.
+// +kubebuilder:object:generate=true
+type PushMonitorSpec struct {
+	// TokenSecretRef selects the push token Secret key. The monitored
+	// service reports in by calling Kuma's <base URL>/api/push/<token>, so
+	// the same Secret is typically mounted into that service too. The Secret
+	// must be in the same namespace as this resource.
+	TokenSecretRef corev1.SecretKeySelector `json:"tokenSecretRef"`
+}
+
+// The first six rules require the sub-struct matching spec.type; the next
+// six reject every other sub-struct, so the discriminator is exclusive rather
+// than silently ignoring extra configuration. The last rejects proxy on Push
+// monitors: Kuma never makes an outbound request for them, and breml's Push
+// payload omits proxyId, so a set proxy would show up as permanent drift.
 //
 // +kubebuilder:validation:XValidation:rule="self.type != 'HTTP' || has(self.http)",message="spec.http is required when type is HTTP"
 // +kubebuilder:validation:XValidation:rule="self.type != 'TCP' || has(self.tcp)",message="spec.tcp is required when type is TCP"
 // +kubebuilder:validation:XValidation:rule="self.type != 'Ping' || has(self.ping)",message="spec.ping is required when type is Ping"
 // +kubebuilder:validation:XValidation:rule="self.type != 'DNS' || has(self.dns)",message="spec.dns is required when type is DNS"
 // +kubebuilder:validation:XValidation:rule="self.type != 'Gamedig' || has(self.gamedig)",message="spec.gamedig is required when type is Gamedig"
+// +kubebuilder:validation:XValidation:rule="self.type != 'Push' || has(self.push)",message="spec.push is required when type is Push"
 // +kubebuilder:validation:XValidation:rule="self.type == 'HTTP' || !has(self.http)",message="spec.http must not be set unless type is HTTP"
 // +kubebuilder:validation:XValidation:rule="self.type == 'TCP' || !has(self.tcp)",message="spec.tcp must not be set unless type is TCP"
 // +kubebuilder:validation:XValidation:rule="self.type == 'Ping' || !has(self.ping)",message="spec.ping must not be set unless type is Ping"
 // +kubebuilder:validation:XValidation:rule="self.type == 'DNS' || !has(self.dns)",message="spec.dns must not be set unless type is DNS"
 // +kubebuilder:validation:XValidation:rule="self.type == 'Gamedig' || !has(self.gamedig)",message="spec.gamedig must not be set unless type is Gamedig"
+// +kubebuilder:validation:XValidation:rule="self.type == 'Push' || !has(self.push)",message="spec.push must not be set unless type is Push"
+// +kubebuilder:validation:XValidation:rule="self.type != 'Push' || !has(self.proxy)",message="spec.proxy must not be set when type is Push"
 // +kubebuilder:object:generate=true
 type MonitorSpec struct {
 	Type MonitorType `json:"type"`
@@ -175,6 +190,7 @@ type MonitorSpec struct {
 	Ping    *PingMonitorSpec    `json:"ping,omitempty"`
 	DNS     *DNSMonitorSpec     `json:"dns,omitempty"`
 	Gamedig *GamedigMonitorSpec `json:"gamedig,omitempty"`
+	Push    *PushMonitorSpec    `json:"push,omitempty"`
 }
 
 // +kubebuilder:object:generate=true

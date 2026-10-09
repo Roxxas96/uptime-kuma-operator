@@ -71,7 +71,7 @@ as values.
 
 - **RBAC grants `get` on every Secret** in the watched namespace(s) (or the
   whole cluster under `watchAll`). This is unavoidable: the operator
-  resolves HTTP-auth/Gamedig-token Secrets referenced by arbitrary
+  resolves HTTP-auth/Gamedig-token/push-token Secrets referenced by arbitrary
   Monitor/Ingress/HTTPRoute resources whose names aren't known ahead of
   time, so RBAC `resourceNames` can't scope this down generically. Secrets
   are fetched one-by-one by name and never listed or cached. In effect,
