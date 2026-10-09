@@ -44,9 +44,11 @@ spec:
             type: object
           spec:
             description: |-
-              The first five rules require the sub-struct matching spec.type; the second
-              five reject every other sub-struct, so the discriminator is exclusive rather
-              than silently ignoring extra configuration.
+              The first six rules require the sub-struct matching spec.type; the next
+              six reject every other sub-struct, so the discriminator is exclusive rather
+              than silently ignoring extra configuration. The last rejects proxy on Push
+              monitors: Kuma never makes an outbound request for them, and breml's Push
+              payload omits proxyId, so a set proxy would show up as permanent drift.
             properties:
               description:
                 description: Description is shown alongside the monitor in the Kuma
@@ -307,6 +309,39 @@ spec:
                 format: int64
                 minimum: 1
                 type: integer
+              push:
+                properties:
+                  tokenSecretRef:
+                    description: |-
+                      TokenSecretRef selects the push token Secret key. The monitored
+                      service reports in by calling Kuma's <base URL>/api/push/<token>, so
+                      the same Secret is typically mounted into that service too. The Secret
+                      must be in the same namespace as this resource.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                required:
+                - tokenSecretRef
+                type: object
               resendInterval:
                 description: |-
                   ResendInterval is how many consecutive failed checks pass between
@@ -369,6 +404,7 @@ spec:
                 - Ping
                 - DNS
                 - Gamedig
+                - Push
                 type: string
               upsideDown:
                 description: |-
@@ -389,6 +425,8 @@ spec:
               rule: self.type != 'DNS' || has(self.dns)
             - message: spec.gamedig is required when type is Gamedig
               rule: self.type != 'Gamedig' || has(self.gamedig)
+            - message: spec.push is required when type is Push
+              rule: self.type != 'Push' || has(self.push)
             - message: spec.http must not be set unless type is HTTP
               rule: self.type == 'HTTP' || !has(self.http)
             - message: spec.tcp must not be set unless type is TCP
@@ -399,6 +437,10 @@ spec:
               rule: self.type == 'DNS' || !has(self.dns)
             - message: spec.gamedig must not be set unless type is Gamedig
               rule: self.type == 'Gamedig' || !has(self.gamedig)
+            - message: spec.push must not be set unless type is Push
+              rule: self.type == 'Push' || !has(self.push)
+            - message: spec.proxy must not be set when type is Push
+              rule: self.type != 'Push' || !has(self.proxy)
           status:
             properties:
               conditions:

@@ -9,6 +9,7 @@ const (
 	TypePing    MonitorType = "Ping"
 	TypeDNS     MonitorType = "DNS"
 	TypeGamedig MonitorType = "Gamedig"
+	TypePush    MonitorType = "Push"
 )
 
 type HTTPSpec struct {
@@ -107,6 +108,12 @@ type GamedigSpec struct {
 	Token string
 }
 
+type PushSpec struct {
+	// Token is an already-resolved secret value: the path segment the
+	// monitored service calls at <Kuma base URL>/api/push/<token>.
+	Token string
+}
+
 // MonitorSpec is the operator's own monitor representation, shared by the
 // Monitor CRD reconciler and the Ingress/HTTPRoute derivation packages. It
 // is translated to breml's monitor.Monitor only inside this package.
@@ -138,4 +145,5 @@ type MonitorSpec struct {
 	Ping    *PingSpec
 	DNS     *DNSSpec
 	Gamedig *GamedigSpec
+	Push    *PushSpec
 }

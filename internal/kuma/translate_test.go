@@ -603,3 +603,47 @@ func TestSecondsFromKuma_RoundsToNearestSecond(t *testing.T) {
 		}
 	}
 }
+
+func TestFromBremlMonitor_RoundTripsThroughToBremlMonitor_PushFields(t *testing.T) {
+	spec := MonitorSpec{
+		Type: TypePush, Name: "nightly-backup",
+		Push: &PushSpec{Token: "ABC1234567"},
+	}
+
+	mon, err := ToBremlMonitor(11, spec)
+	if err != nil {
+		t.Fatalf("ToBremlMonitor: %v", err)
+	}
+	data, err := json.Marshal(mon)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var base bremlmonitor.Base
+	if err := json.Unmarshal(data, &base); err != nil {
+		t.Fatalf("unmarshal into Base: %v", err)
+	}
+
+	got, err := FromBremlMonitor(base)
+	if err != nil {
+		t.Fatalf("FromBremlMonitor: %v", err)
+	}
+	if !Equivalent(spec, got) {
+		t.Errorf("FromBremlMonitor(round-tripped ToBremlMonitor(%+v)) = %+v, want an equivalent spec", spec, got)
+	}
+}
+
+func TestEquivalent_DetectsDrift_PushFields(t *testing.T) {
+	base := MonitorSpec{Type: TypePush, Name: "nightly-backup", Push: &PushSpec{Token: "ABC1234567"}}
+	changedToken := base
+	changedToken.Push = &PushSpec{Token: "XYZ7654321"}
+	if Equivalent(base, changedToken) {
+		t.Error("Equivalent(base, changedToken) = true, want false")
+	}
+}
+
+func TestToBremlMonitor_PushRequiresToken(t *testing.T) {
+	_, err := ToBremlMonitor(0, MonitorSpec{Type: TypePush, Push: &PushSpec{}})
+	if err == nil {
+		t.Fatal("expected error for an empty push token, got nil")
+	}
+}

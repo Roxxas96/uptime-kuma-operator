@@ -807,3 +807,107 @@ func TestMonitorReconciler_AppliesLabelDerivedTags(t *testing.T) {
 		t.Errorf("inferred tag name = %q, want %q", name, "team=platform")
 	}
 }
+
+func TestMonitorReconciler_ResolvesPushTokenSecret(t *testing.T) {
+	ctx := context.Background()
+	r, fake := newMonitorReconciler(t)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "backup-push", Namespace: "default"},
+		StringData: map[string]string{"token": "ABC1234567"},
+	}
+	if err := k8sClient.Create(ctx, secret); err != nil {
+		t.Fatalf("create Secret: %v", err)
+	}
+	defer k8sClient.Delete(ctx, secret)
+
+	mon := &uptimekumaiov1alpha1.Monitor{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly-backup", Namespace: "default"},
+		Spec: uptimekumaiov1alpha1.MonitorSpec{
+			Type: uptimekumaiov1alpha1.MonitorTypePush,
+			Push: &uptimekumaiov1alpha1.PushMonitorSpec{
+				TokenSecretRef: corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "backup-push"}, Key: "token",
+				},
+			},
+		},
+	}
+	if err := k8sClient.Create(ctx, mon); err != nil {
+		t.Fatalf("create Monitor: %v", err)
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mon.Name, Namespace: mon.Namespace}}
+	defer func() {
+		_ = k8sClient.Delete(ctx, mon)
+		_, _ = r.Reconcile(ctx, req)
+	}()
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	updated := &uptimekumaiov1alpha1.Monitor{}
+	if err := k8sClient.Get(ctx, req.NamespacedName, updated); err != nil {
+		t.Fatalf("get Monitor: %v", err)
+	}
+	id, err := strconv.ParseInt(updated.Status.MonitorID, 10, 64)
+	if err != nil {
+		t.Fatalf("status.monitorID %q is not an integer: %v", updated.Status.MonitorID, err)
+	}
+	spec := fake.Monitors[id]
+	if spec.Type != kuma.TypePush || spec.Push == nil || spec.Push.Token != "ABC1234567" {
+		t.Errorf("synced spec = %+v (Push %+v), want a Push monitor with token %q", spec, spec.Push, "ABC1234567")
+	}
+}
+
+// TestMonitorSpec_PushCELRules covers the Push-specific CEL rules, which only
+// a real API server evaluates.
+func TestMonitorSpec_PushCELRules(t *testing.T) {
+	ctx := context.Background()
+	pushSpec := &uptimekumaiov1alpha1.PushMonitorSpec{
+		TokenSecretRef: corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "backup-push"}, Key: "token",
+		},
+	}
+
+	tests := []struct {
+		name    string
+		spec    uptimekumaiov1alpha1.MonitorSpec
+		wantMsg string
+	}{
+		{
+			name:    "missing push block",
+			spec:    uptimekumaiov1alpha1.MonitorSpec{Type: uptimekumaiov1alpha1.MonitorTypePush},
+			wantMsg: "spec.push is required when type is Push",
+		},
+		{
+			name: "push block on another type",
+			spec: uptimekumaiov1alpha1.MonitorSpec{
+				Type: uptimekumaiov1alpha1.MonitorTypePing,
+				Ping: &uptimekumaiov1alpha1.PingMonitorSpec{Host: "10.0.0.1"},
+				Push: pushSpec,
+			},
+			wantMsg: "spec.push must not be set unless type is Push",
+		},
+		{
+			name:    "proxy on push",
+			spec:    uptimekumaiov1alpha1.MonitorSpec{Type: uptimekumaiov1alpha1.MonitorTypePush, Proxy: 1, Push: pushSpec},
+			wantMsg: "spec.proxy must not be set when type is Push",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mon := &uptimekumaiov1alpha1.Monitor{
+				ObjectMeta: metav1.ObjectMeta{Name: "push-cel", Namespace: "default"},
+				Spec:       tc.spec,
+			}
+			err := k8sClient.Create(ctx, mon)
+			if err == nil {
+				_ = k8sClient.Delete(ctx, mon)
+				t.Fatalf("expected the API server to reject %s", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.wantMsg) {
+				t.Errorf("rejection message = %q, want %q", err.Error(), tc.wantMsg)
+			}
+		})
+	}
+}

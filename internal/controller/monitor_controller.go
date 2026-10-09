@@ -136,6 +136,14 @@ func (r *MonitorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 		desiredSpec.Gamedig.Token = token
 	}
+	if mon.Spec.Push != nil && desiredSpec.Push != nil {
+		token, err := resolveSecret(ctx, r.Client, mon.Namespace, &mon.Spec.Push.TokenSecretRef)
+		if err != nil {
+			recordSyncFailure(r.Recorder, mon, err)
+			return ctrl.Result{}, err
+		}
+		desiredSpec.Push.Token = token
+	}
 
 	if existingID != 0 && mon.Status.ObservedGeneration == mon.Generation {
 		log.V(1).Info("desired configuration unchanged since last sync, checking Kuma for drift", "monitorID", existingID)

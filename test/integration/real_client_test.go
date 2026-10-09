@@ -4,6 +4,9 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -120,6 +123,68 @@ func TestRealClient_CreateUpdateDelete(t *testing.T) {
 	}
 	if _, ok := existingSpecs[dnsID]; ok {
 		t.Errorf("ExistingSpecs = %v, want %d absent after deletion", existingSpecs, dnsID)
+	}
+}
+
+// TestRealClient_PushMonitor checks that a Push monitor round-trips through
+// a real Kuma without reporting drift, and that its push URL accepts a
+// heartbeat for the token the operator set.
+func TestRealClient_PushMonitor(t *testing.T) {
+	url := envOrSkip(t, "KUMA_URL")
+	user := envOrSkip(t, "KUMA_USERNAME")
+	pass := envOrSkip(t, "KUMA_PASSWORD")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	bootstrapKuma(t, ctx, url, user, pass)
+
+	client, err := kuma.NewClient(ctx, url, kuma.Credentials{Username: user, Password: pass})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	spec := kuma.MonitorSpec{
+		Type: kuma.TypePush, Name: "integration-test-push",
+		Push: &kuma.PushSpec{Token: "integrationPushToken0123456789ab"},
+	}
+	id, err := client.Upsert(ctx, 0, spec)
+	if err != nil {
+		t.Fatalf("Upsert Push create: %v", err)
+	}
+	defer func() {
+		if err := client.Delete(ctx, id); err != nil {
+			t.Errorf("Delete Push monitor: %v", err)
+		}
+	}()
+
+	existingSpecs, err := client.ExistingSpecs(ctx)
+	if err != nil {
+		t.Fatalf("ExistingSpecs: %v", err)
+	}
+	if got := existingSpecs[id]; !kuma.Equivalent(spec, got) {
+		t.Errorf("ExistingSpecs[%d] = %+v (Push %+v), want a spec Equivalent to %+v", id, got, got.Push, spec)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		strings.TrimSuffix(url, "/")+"/api/push/"+spec.Push.Token+"?status=up&msg=OK", nil)
+	if err != nil {
+		t.Fatalf("build push request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("push heartbeat: %v", err)
+	}
+	defer resp.Body.Close()
+	var body struct {
+		OK  bool   `json:"ok"`
+		Msg string `json:"msg"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode push response (status %d): %v", resp.StatusCode, err)
+	}
+	if !body.OK {
+		t.Errorf("push heartbeat response = %+v (status %d), want ok=true", body, resp.StatusCode)
 	}
 }
 
