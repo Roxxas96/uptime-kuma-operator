@@ -4,7 +4,7 @@ go 1.27.2
 
 require (
 	github.com/breml/go-uptime-kuma-client v0.6.0
-	github.com/prometheus/client_golang v1.24.1
+	github.com/prometheus/client_golang v1.25.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.46.0
 	go.opentelemetry.io/otel/exporters/prometheus v0.69.0
