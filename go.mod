@@ -1,6 +1,6 @@
 module uptime-kuma-operator
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/breml/go-uptime-kuma-client v0.6.0
