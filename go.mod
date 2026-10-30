@@ -3,7 +3,7 @@ module uptime-kuma-operator
 go 1.27.3
 
 require (
-	github.com/breml/go-uptime-kuma-client v0.6.0
+	github.com/breml/go-uptime-kuma-client v0.6.2
 	github.com/prometheus/client_golang v1.25.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.46.0
