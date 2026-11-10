@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4 # installs go, golangci-lint, govulncheck, helm, prek pinned in mise.toml
+      - uses: jdx/mise-action@v5 # installs go, golangci-lint, govulncheck, helm, prek pinned in mise.toml
       - uses: j178/prek-action@44924fe9ef4a6f88253c4b6b1bf11c689d3ce53d # v3.1.0
 
   test:
@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
       - run: make test
       # make test's `manifests` prerequisite regenerates config/crd/bases/ from
       # the Go types and copies it into the chart's crds/ — fail if either is
@@ -57,7 +57,7 @@ jobs:
       KUMA_PASSWORD: ci-integration-test-password
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
       - name: Start Uptime Kuma
         run: docker compose -f test/integration/docker-compose.yaml up -d
       - name: Wait for Uptime Kuma to be ready
@@ -195,7 +195,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v4 # installs helm, pinned in mise.toml
+      - uses: jdx/mise-action@v5 # installs helm, pinned in mise.toml
 
       # Both the chart's version and its appVersion come from the tag, so
       # cutting a release is just pushing a tag — Chart.yaml's own version
